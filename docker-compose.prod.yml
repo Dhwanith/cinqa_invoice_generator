@@ -1,0 +1,51 @@
+services:
+  operator-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf-service
+    container_name: cinqa-operator-app
+    env_file:
+      - .env
+    environment:
+      APP_PORT: 3010
+    expose:
+      - "3010"
+    command: ["npm", "run", "app:server"]
+    restart: unless-stopped
+
+  pdf-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf-service
+    container_name: cinqa-pdf-service
+    env_file:
+      - .env
+    environment:
+      PDF_SERVICE_PORT: 3001
+    expose:
+      - "3001"
+    command: ["npm", "run", "pdf:service"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10
+    container_name: cinqa-caddy
+    depends_on:
+      - operator-app
+      - pdf-service
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      PDF_DOMAIN: ${PDF_DOMAIN}
+      PDF_BASIC_AUTH_HASH: ${PDF_BASIC_AUTH_HASH}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

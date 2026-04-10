@@ -1,0 +1,24 @@
+{
+  "name": "cinqa-invoice-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GST-compliant invoice generation helpers for the Cinqa n8n workflow.",
+  "scripts": {
+    "test": "node --test",
+    "generate:sample": "node scripts/generate-sample.js",
+    "pdf:service": "node scripts/pdf-service.js",
+    "app:server": "node scripts/app-server.js",
+    "frontend:install": "npm install --prefix frontend",
+    "frontend:dev": "npm run dev --prefix frontend",
+    "frontend:build": "npm run build --prefix frontend"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "puppeteer": "^24.40.0"
+  }
+}

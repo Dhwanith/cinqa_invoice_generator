@@ -1,0 +1,856 @@
+{
+  "name": "Cinqa Create Invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "create-invoice",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Create Invoice Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/validate-request.js here\nreturn items;"
+      },
+      "id": "2",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_CLIENTS}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ $json.metadata.clientsFilterFormula }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "19",
+      "name": "Find Client Defaults",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/hydrate-client-defaults.js here\nreturn items;"
+      },
+      "id": "20",
+      "name": "Hydrate Client Defaults",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_INVOICES}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ $json.metadata.invoicesFilterFormula }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Find Existing Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1240,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ Array.isArray($json.records) ? $json.records.length : 0 }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "Existing Invoice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/build-duplicate-response.js here\nreturn items;"
+      },
+      "id": "5",
+      "name": "Build Duplicate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Respond Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_SEQUENCES}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "={{ $items('Hydrate Client Defaults', 0, 0)[0].json.metadata.sequenceFilterFormula }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7",
+      "name": "Get FY Sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/build-invoice.js here\nreturn items;"
+      },
+      "id": "8",
+      "name": "Build Invoice",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_INVOICES}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { fields: $json.invoiceFields } }}",
+        "options": {}
+      },
+      "id": "9",
+      "name": "Create Invoice Record",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "10",
+      "name": "Merge Invoice Context",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2440,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_LINE_ITEMS}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { records: $json.lineItemFields.map((fields) => ({ fields: { ...fields, 'Invoice No': $items('Build Invoice', 0, 0)[0].json.invoiceNo, ...($env.AIRTABLE_FIELD_INVOICE_LINK ? { [$env.AIRTABLE_FIELD_INVOICE_LINK]: [$json.id] } : {}) } })) } }}",
+        "options": {}
+      },
+      "id": "11",
+      "name": "Create Line Items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/prepare-sequence-upsert.js here\nreturn items;"
+      },
+      "id": "12",
+      "name": "Prepare Sequence Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2920,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.sequenceRecordId }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "13",
+      "name": "Sequence Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_SEQUENCES}}/{{$json.sequenceRecordId}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { fields: $json.sequenceFields } }}",
+        "options": {}
+      },
+      "id": "14",
+      "name": "Update Sequence Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3400,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_SEQUENCES}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { fields: $json.sequenceFields } }}",
+        "options": {}
+      },
+      "id": "15",
+      "name": "Create Sequence Row",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3400,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "16",
+      "name": "Merge Sequence Result",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3640,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.PDF_SERVICE_URL || 'http://host.docker.internal:3001') + '/render-invoice-pdf' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { invoice: $items('Build Invoice', 0, 0)[0].json.invoiceDocument } }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "21",
+      "name": "Render Invoice PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $items('Build Invoice', 0, 0)[0].json.invoiceNo + '.pdf' }}",
+        "driveId": {
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "mode": "id",
+          "value": "={{ $env.GOOGLE_DRIVE_INVOICE_FOLDER_ID }}"
+        },
+        "options": {
+          "simplifyOutput": true
+        }
+      },
+      "id": "22",
+      "name": "Upload Invoice PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        4120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/build-drive-update.js here\nreturn items;"
+      },
+      "id": "23",
+      "name": "Build Drive Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4360,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_INVOICES}}/{{$json.invoiceRecordId}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.AIRTABLE_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { fields: $json.driveUpdateFields } }}",
+        "options": {}
+      },
+      "id": "24",
+      "name": "Update Invoice Drive Fields",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "ok",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "name": "duplicate",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "name": "message",
+              "value": "Invoice created successfully.",
+              "type": "string"
+            },
+            {
+              "name": "invoiceNo",
+              "value": "={{ $items('Build Invoice', 0, 0)[0].json.invoiceNo }}",
+              "type": "string"
+            },
+            {
+              "name": "invoiceRecordId",
+              "value": "={{ $items('Create Invoice Record', 0, 0)[0].json.id }}",
+              "type": "string"
+            },
+            {
+              "name": "sequence",
+              "value": "={{ $items('Build Invoice', 0, 0)[0].json.sequence }}",
+              "type": "number"
+            },
+            {
+              "name": "financialYear",
+              "value": "={{ $items('Build Invoice', 0, 0)[0].json.metadata.financialYear }}",
+              "type": "string"
+            },
+            {
+              "name": "total",
+              "value": "={{ $items('Build Invoice', 0, 0)[0].json.invoiceFields.Total }}",
+              "type": "number"
+            },
+            {
+              "name": "googleDriveFileId",
+              "value": "={{ $items('Build Drive Update', 0, 0)[0].json.driveFileId || '' }}",
+              "type": "string"
+            },
+            {
+              "name": "googleDriveUrl",
+              "value": "={{ $items('Build Drive Update', 0, 0)[0].json.driveUrl || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "17",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4840,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "18",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        5080,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Create Invoice Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Find Client Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Client Defaults": {
+      "main": [
+        [
+          {
+            "node": "Hydrate Client Defaults",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hydrate Client Defaults": {
+      "main": [
+        [
+          {
+            "node": "Find Existing Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Existing Invoice": {
+      "main": [
+        [
+          {
+            "node": "Existing Invoice?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Existing Invoice?": {
+      "main": [
+        [
+          {
+            "node": "Build Duplicate Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get FY Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Duplicate Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get FY Sequence": {
+      "main": [
+        [
+          {
+            "node": "Build Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Invoice": {
+      "main": [
+        [
+          {
+            "node": "Create Invoice Record",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Invoice Context",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Invoice Record": {
+      "main": [
+        [
+          {
+            "node": "Merge Invoice Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Invoice Context": {
+      "main": [
+        [
+          {
+            "node": "Create Line Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Line Items": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sequence Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sequence Upsert": {
+      "main": [
+        [
+          {
+            "node": "Sequence Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sequence Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Sequence Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Sequence Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Sequence Row": {
+      "main": [
+        [
+          {
+            "node": "Merge Sequence Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Sequence Row": {
+      "main": [
+        [
+          {
+            "node": "Merge Sequence Result",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Sequence Result": {
+      "main": [
+        [
+          {
+            "node": "Render Invoice PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Invoice PDF": {
+      "main": [
+        [
+          {
+            "node": "Upload Invoice PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Invoice PDF": {
+      "main": [
+        [
+          {
+            "node": "Build Drive Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Drive Update": {
+      "main": [
+        [
+          {
+            "node": "Update Invoice Drive Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Invoice Drive Fields": {
+      "main": [
+        [
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cinqa-create-invoice-v2",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "cinqa-create-invoice"
+}

@@ -1,0 +1,2 @@
+Invoice No,Idempotency Key,Invoice Date,Due Date,Client,Client Name,GSTIN,State,State Code,Place of Supply,GST Type,Amount,CGST,SGST,IGST,Total,SAC,Reverse Charge,Status,Total In Words,PDF
+CTS/26-27/INV/001,req-2026-04-04-001,2026-04-04,2026-04-14,AdKrity Digital Solutions Private Limited,AdKrity Digital Solutions Private Limited,24AAVCA3793L1ZY,Gujarat,24,Gujarat (24),CGST/SGST,300000,27000,27000,0,354000,998314,No,generated,Three Lakh Fifty-Four Thousand Rupees Only,

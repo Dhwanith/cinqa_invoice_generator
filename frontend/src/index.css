@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Poppins:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 34 33% 95%;
+    --foreground: 25 18% 11%;
+
+    --card: 36 50% 97%;
+    --card-foreground: 25 18% 11%;
+
+    --popover: 36 50% 97%;
+    --popover-foreground: 25 18% 11%;
+
+    --primary: 14 55% 41%;
+    --primary-foreground: 36 60% 97%;
+
+    --secondary: 32 60% 83%;
+    --secondary-foreground: 25 18% 11%;
+
+    --muted: 34 20% 90%;
+    --muted-foreground: 30 12% 40%;
+
+    --accent: 32 80% 92%;
+    --accent-foreground: 14 55% 28%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 44% 34%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 30 18% 85%;
+    --input: 30 18% 85%;
+    --ring: 14 55% 41%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 36 40% 97%;
+    --sidebar-foreground: 30 12% 40%;
+    --sidebar-primary: 14 55% 41%;
+    --sidebar-primary-foreground: 36 60% 97%;
+    --sidebar-accent: 32 60% 92%;
+    --sidebar-accent-foreground: 14 55% 28%;
+    --sidebar-border: 30 18% 90%;
+    --sidebar-ring: 14 55% 41%;
+
+    --font-brand: 'Syne', 'Poppins', sans-serif;
+    --font-body: 'Poppins', 'Segoe UI', sans-serif;
+
+    --gradient-warm: linear-gradient(135deg, hsl(14 55% 41%), hsl(14 65% 25%));
+    --gradient-surface: linear-gradient(180deg, hsl(36 50% 98%), hsl(34 33% 93%));
+    --gradient-accent: linear-gradient(180deg, hsl(32 80% 95%), hsl(32 60% 88%));
+    --shadow-soft: 0 4px 24px hsl(25 30% 30% / 0.08);
+    --shadow-elevated: 0 12px 40px hsl(25 30% 30% / 0.12);
+  }
+
+  .dark {
+    --background: 25 18% 8%;
+    --foreground: 34 33% 95%;
+    --card: 25 18% 11%;
+    --card-foreground: 34 33% 95%;
+    --popover: 25 18% 11%;
+    --popover-foreground: 34 33% 95%;
+    --primary: 14 55% 50%;
+    --primary-foreground: 36 60% 97%;
+    --secondary: 30 20% 18%;
+    --secondary-foreground: 34 33% 95%;
+    --muted: 30 12% 18%;
+    --muted-foreground: 30 12% 60%;
+    --accent: 30 20% 18%;
+    --accent-foreground: 14 55% 50%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 12% 20%;
+    --input: 30 12% 20%;
+    --ring: 14 55% 50%;
+    --sidebar-background: 25 18% 10%;
+    --sidebar-foreground: 30 12% 60%;
+    --sidebar-primary: 14 55% 50%;
+    --sidebar-primary-foreground: 36 60% 97%;
+    --sidebar-accent: 30 20% 15%;
+    --sidebar-accent-foreground: 14 55% 50%;
+    --sidebar-border: 30 12% 18%;
+    --sidebar-ring: 14 55% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3 {
+    font-family: var(--font-brand);
+    letter-spacing: -0.03em;
+  }
+}
+
+@layer utilities {
+  .font-brand {
+    font-family: var(--font-brand);
+  }
+  .gradient-warm {
+    background: var(--gradient-warm);
+  }
+  .shadow-soft {
+    box-shadow: var(--shadow-soft);
+  }
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+}

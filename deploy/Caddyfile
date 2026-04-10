@@ -1,0 +1,13 @@
+{$APP_DOMAIN} {
+    encode gzip zstd
+    reverse_proxy operator-app:3010
+}
+
+{$PDF_DOMAIN} {
+    basicauth {
+        cinqa {$PDF_BASIC_AUTH_HASH}
+    }
+
+    encode gzip zstd
+    reverse_proxy pdf-service:3001
+}

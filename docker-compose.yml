@@ -1,0 +1,50 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-main
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    environment:
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+      - PDF_SERVICE_URL=http://pdf-service:3001
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - pdf-service
+    restart: unless-stopped
+
+  operator-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf-service
+    container_name: cinqa-operator-app
+    env_file:
+      - .env
+    environment:
+      - APP_PORT=3010
+      - CREATE_INVOICE_WEBHOOK_URL=http://n8n:5678/webhook/create-invoice
+    ports:
+      - "3010:3010"
+    command: ["npm", "run", "app:server"]
+    depends_on:
+      - n8n
+      - pdf-service
+    restart: unless-stopped
+
+  pdf-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf-service
+    container_name: cinqa-pdf-service
+    env_file:
+      - .env
+    environment:
+      - PDF_SERVICE_PORT=3001
+    expose:
+      - "3001"
+    restart: unless-stopped
+
+volumes:
+  n8n_data:

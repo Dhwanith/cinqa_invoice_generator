@@ -153,7 +153,7 @@ export function renderInvoiceHtml(invoice) {
       * { box-sizing: border-box; }
       html, body {
         width: 210mm;
-        height: 297mm;
+        min-height: 297mm;
       }
       body {
         margin: 0;
@@ -166,7 +166,7 @@ export function renderInvoiceHtml(invoice) {
       }
       .invoice {
         width: 210mm;
-        height: 297mm;
+        min-height: 297mm;
         padding: 15mm 12mm 0;
         margin: 0 auto;
         display: flex;
@@ -319,12 +319,24 @@ export function renderInvoiceHtml(invoice) {
         border-collapse: collapse;
         table-layout: fixed;
       }
+      thead {
+        display: table-header-group;
+      }
+      tbody {
+        display: table-row-group;
+      }
       th, td {
         border: 1px solid #b8b8b8;
         padding: 8px 5px;
         vertical-align: top;
         word-wrap: break-word;
         overflow-wrap: anywhere;
+      }
+      tr,
+      td,
+      th {
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       th {
         background: #e2e2e2;
@@ -367,10 +379,12 @@ export function renderInvoiceHtml(invoice) {
         display: grid;
         grid-template-columns: 1.2fr 0.82fr;
         gap: 22px;
-        margin-top: 118px;
+        margin-top: auto;
         padding-top: 16px;
         border-top: 1px solid #d1d1d1;
         align-items: start;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       .payment-panel {
         padding: 0 6px 0;
@@ -439,10 +453,12 @@ export function renderInvoiceHtml(invoice) {
         display: grid;
         grid-template-columns: 1fr 260px;
         gap: 24px;
-        margin-top: auto;
-        padding-top: 46px;
+        margin-top: 22px;
+        padding-top: 24px;
         padding-bottom: 5px;
         align-items: end;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       .terms-card ol {
         margin: 0 0 0 18px;
@@ -458,6 +474,8 @@ export function renderInvoiceHtml(invoice) {
         justify-content: flex-end;
         min-height: 150px;
         align-items: flex-end;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       .signatory-company {
         font-size: 12px;
@@ -490,6 +508,8 @@ export function renderInvoiceHtml(invoice) {
       .footer-strip {
         margin: auto -12mm 0;
         padding: 10px 12mm 11px;
+        page-break-inside: avoid;
+        break-inside: avoid;
       }
       .bottom-bar {
         color: #8f8f8f;

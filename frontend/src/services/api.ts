@@ -17,6 +17,7 @@ export interface CreateClientPayload {
   stateCode: number;
   addressLine1: string;
   addressLine2: string;
+  addressLine3: string;
   defaultSac: string;
   defaultPaymentTermsDays: number;
   email: string;

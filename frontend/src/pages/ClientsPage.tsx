@@ -17,6 +17,7 @@ const defaultFormState: CreateClientPayload = {
   stateCode: 24,
   addressLine1: "",
   addressLine2: "",
+  addressLine3: "",
   defaultSac: "998314",
   defaultPaymentTermsDays: 10,
   email: "",
@@ -71,6 +72,7 @@ export default function ClientsPage() {
       stateCode: client.stateCode,
       addressLine1: client.addressLines[0] || "",
       addressLine2: client.addressLines[1] || "",
+      addressLine3: client.addressLines[2] || "",
       defaultSac: client.defaultSac || "998314",
       defaultPaymentTermsDays: client.defaultPaymentTermsDays || 10,
       email: client.email || "",
@@ -150,6 +152,10 @@ export default function ClientsPage() {
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Address Line 2</label>
                   <Input value={formState.addressLine2} onChange={(e) => updateField("addressLine2", e.target.value)} placeholder="City, area" />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-xs font-semibold text-muted-foreground">Address Line 3</label>
+                  <Input value={formState.addressLine3} onChange={(e) => updateField("addressLine3", e.target.value)} placeholder="Surat - 395007, GJ(24)" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Default SAC</label>

@@ -13,7 +13,7 @@ const request = {
     addressLines:
       validated.request.client.addressLines?.length > 0
         ? validated.request.client.addressLines
-        : [fields['Address Line 1'], fields['Address Line 2']].filter(Boolean),
+        : [fields['Address Line 1'], fields['Address Line 2'], fields['Address Line 3']].filter(Boolean),
     defaultSac: fields['Default SAC'] || validated.request.client.defaultSac || validated.metadata.defaultSac,
     defaultPaymentTermsDays: Number(fields['Default Payment Terms Days'] || validated.request.client.defaultPaymentTermsDays || validated.metadata.paymentTermsDays)
   }

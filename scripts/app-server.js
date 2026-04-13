@@ -332,7 +332,7 @@ async function airtableRequest(url, init = {}) {
 }
 
 function normalizeClientFields(fields, recordId) {
-  const addressLines = [fields['Address Line 1'], fields['Address Line 2']].filter(Boolean);
+  const addressLines = [fields['Address Line 1'], fields['Address Line 2'], fields['Address Line 3']].filter(Boolean);
   const activeValue = fields.Active;
   const isActive =
     activeValue === undefined ||
@@ -487,6 +487,7 @@ function validateClientPayload(payload) {
     stateCode,
     addressLine1: validateTrimmedString(payload.addressLine1, 'Address Line 1'),
     addressLine2: validateOptionalString(payload.addressLine2),
+    addressLine3: validateOptionalString(payload.addressLine3),
     defaultSac: validateOptionalString(payload.defaultSac) || getEnv('DEFAULT_SAC', '998314'),
     defaultPaymentTermsDays: Number(payload.defaultPaymentTermsDays || getEnv('PAYMENT_TERMS_DAYS', '10')),
     email: validateOptionalString(payload.email),
@@ -513,6 +514,7 @@ function buildClientAirtableFields(client) {
     'State Code': client.stateCode,
     'Address Line 1': client.addressLine1,
     'Address Line 2': client.addressLine2,
+    'Address Line 3': client.addressLine3,
     'Default SAC': normalizeSacForAirtable(client.defaultSac),
     'Default Payment Terms Days': client.defaultPaymentTermsDays,
     Email: client.email,

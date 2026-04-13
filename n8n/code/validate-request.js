@@ -71,6 +71,7 @@ function validateGstin(gstin, stateCode) {
 
 function normalizeLineItems(lineItems, { defaultSac, invoiceType, showQuantity }) {
   assert(Array.isArray(lineItems) && lineItems.length > 0, 'lineItems must contain at least one item.');
+  assert(lineItems.length <= 15, 'lineItems cannot contain more than 15 items.');
 
   return lineItems.map((lineItem, index) => {
     const quantity = showQuantity

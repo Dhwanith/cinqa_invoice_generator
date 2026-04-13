@@ -257,8 +257,22 @@
     },
     {
       "parameters": {
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/create-line-items.js here\nreturn items;"
+      },
+      "id": "11",
+      "name": "Create Line Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2680,
+        400
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_TABLE_LINE_ITEMS}}",
+        "url": "={{ $json.airtableUrl }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -275,16 +289,31 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { records: $json.lineItemFields.map((fields) => ({ fields: { ...fields, 'Invoice No': $items('Build Invoice', 0, 0)[0].json.invoiceNo, ...($env.AIRTABLE_FIELD_INVOICE_LINK ? { [$env.AIRTABLE_FIELD_INVOICE_LINK]: [$json.id] } : {}) } })) } }}",
+        "jsonBody": "={{ $json.requestBody }}",
         "options": {}
       },
-      "id": "11",
-      "name": "Create Line Items",
+      "id": "25",
+      "name": "Create Line Item Batch",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2680,
-        400
+        2920,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Paste the contents of n8n/code/finalize-line-items.js here\nreturn items;"
+      },
+      "id": "26",
+      "name": "Finalize Line Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3160,
+        320
       ]
     },
     {
@@ -715,6 +744,28 @@
       ]
     },
     "Create Line Items": {
+      "main": [
+        [
+          {
+            "node": "Create Line Item Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Line Item Batch": {
+      "main": [
+        [
+          {
+            "node": "Finalize Line Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Line Items": {
       "main": [
         [
           {

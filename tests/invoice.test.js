@@ -90,3 +90,21 @@ test('buildInvoiceDocument uses proforma sequence format', () => {
 
   assert.equal(invoice.invoiceNo, 'CTS/26-27/PI/003');
 });
+
+test('buildInvoiceDocument preserves a third client address line', () => {
+  const invoice = buildInvoiceDocument({
+    idempotencyKey: 'req-3',
+    invoiceDate: '2026-04-04',
+    sequence: 8,
+    client: {
+      name: 'XYZ Pvt Ltd',
+      gstin: '24ABCDE1234F1Z5',
+      state: 'Gujarat',
+      stateCode: 24,
+      addressLines: ['Line 1', 'Line 2', 'Surat - 395007, GJ(24)']
+    },
+    lineItems: [{ description: 'Service A', sac: '998314', amount: 1000 }]
+  });
+
+  assert.deepEqual(invoice.client.addressLines, ['Line 1', 'Line 2', 'Surat - 395007, GJ(24)']);
+});

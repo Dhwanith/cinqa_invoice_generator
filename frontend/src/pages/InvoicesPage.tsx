@@ -225,7 +225,7 @@ export default function InvoicesPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Convert to tax invoice</DialogTitle>
             <DialogDescription>
@@ -235,7 +235,7 @@ export default function InvoicesPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="space-y-4 pr-1">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Purchase Order No</label>
               <Input
@@ -245,15 +245,17 @@ export default function InvoicesPage() {
                 disabled={convertMutation.isPending}
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground">SAC No</label>
+            <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">SAC No</label>
+                <p className="text-xs text-muted-foreground">Change the SAC for all line items on the converted tax invoice.</p>
+              </div>
               <Input
                 value={conversionSac}
                 onChange={(event) => setConversionSac(event.target.value)}
                 placeholder="998314"
                 disabled={convertMutation.isPending}
               />
-              <p className="text-xs text-muted-foreground">Applies to all line items on the converted tax invoice.</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Purchase Order Date</label>

@@ -57,15 +57,15 @@ AIRTABLE_TABLE_CLIENTS=clients
 AIRTABLE_TABLE_INVOICES=invoices
 AIRTABLE_TABLE_LINE_ITEMS=invoice_line_items
 AIRTABLE_TABLE_SEQUENCES=invoice_sequences
-AIRTABLE_FIELD_CLIENT_LINK=Client Record
-AIRTABLE_FIELD_INVOICE_LINK=Invoice Record
-AIRTABLE_FIELD_PROFORMA_LINK=Proforma Invoice Record
+AIRTABLE_FIELD_CLIENT_LINK="Client Record"
+AIRTABLE_FIELD_INVOICE_LINK="Invoice Record"
+AIRTABLE_FIELD_PROFORMA_LINK="Proforma Invoice Record"
 AIRTABLE_INVOICE_STATUS_GENERATED=Generated
 
 PDF_SERVICE_URL=https://pdf-internal.cinqa.space
 GOOGLE_DRIVE_INVOICE_FOLDER_ID=replace-me
 
-COMPANY_NAME=Cinqa Tech Solutions LLP
+COMPANY_NAME="Cinqa Tech Solutions LLP"
 COMPANY_GST=replace-me
 COMPANY_PAN=replace-me
 COMPANY_TAN=replace-me
@@ -77,12 +77,12 @@ COMPANY_ADDRESS_LINE_1=replace-me
 COMPANY_ADDRESS_LINE_2=replace-me
 COMPANY_EMAIL=replace-me
 COMPANY_WEBSITE=replace-me
-BANK_ACCOUNT_NAME=replace-me
+BANK_ACCOUNT_NAME="replace-me"
 BANK_NAME=replace-me
 BANK_ACCOUNT_NUMBER=replace-me
-BANK_BRANCH_NAME=replace-me
+BANK_BRANCH_NAME="replace-me"
 BANK_IFSC=replace-me
-AUTHORIZED_SIGNATORY=Authorized Signatory
+AUTHORIZED_SIGNATORY="Authorized Signatory"
 PAYMENT_TERMS_DAYS=10
 
 # Set this only if the app server is configured with the same value.
@@ -90,6 +90,8 @@ N8N_WEBHOOK_SECRET=replace-me
 ```
 
 Store Google Drive access in hosted n8n credentials, not in the VPS `.env`.
+
+If your n8n startup script sources the invoice env file in Bash, any value containing spaces must be quoted.
 
 ## 3. Required Repo Changes Included
 

@@ -46,6 +46,7 @@ export default function InvoicesPage() {
   const [invoicePendingConversion, setInvoicePendingConversion] = useState<Invoice | null>(null);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
   const [purchaseOrderDate, setPurchaseOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [conversionSac, setConversionSac] = useState("");
 
   const { data: invoices = [], isLoading } = useQuery({
     queryKey: ["invoices", search, filter],
@@ -81,13 +82,14 @@ export default function InvoicesPage() {
   });
 
   const convertMutation = useMutation({
-    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: { purchaseOrderNumber: string; purchaseOrderDate: string } }) =>
+    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: { purchaseOrderNumber: string; purchaseOrderDate: string; sac?: string } }) =>
       convertProformaToTaxInvoice(invoiceId, payload),
     onSuccess: (invoice) => {
       toast.success(invoice.invoiceNo ? `Created ${invoice.invoiceNo}.` : "Tax invoice conversion requested.");
       setInvoicePendingConversion(null);
       setPurchaseOrderNumber("");
       setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
+      setConversionSac("");
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
     },
     onError: (error) => {
@@ -95,10 +97,20 @@ export default function InvoicesPage() {
     },
   });
 
+  const getConversionSac = (invoice: Invoice) => {
+    const lineItemSacs = [...new Set((invoice.lineItems || []).map((lineItem) => lineItem.sac).filter(Boolean))];
+    if (lineItemSacs.length === 1) {
+      return lineItemSacs[0];
+    }
+
+    return invoice.sac && !invoice.sac.includes(",") ? invoice.sac : "";
+  };
+
   const openConversionDialog = (invoice: Invoice) => {
     setInvoicePendingConversion(invoice);
     setPurchaseOrderNumber("");
     setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
+    setConversionSac(getConversionSac(invoice));
   };
 
   const sortedInvoices = useMemo(() => {
@@ -234,6 +246,16 @@ export default function InvoicesPage() {
               />
             </div>
             <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">SAC No</label>
+              <Input
+                value={conversionSac}
+                onChange={(event) => setConversionSac(event.target.value)}
+                placeholder="998314"
+                disabled={convertMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">Applies to all line items on the converted tax invoice.</p>
+            </div>
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Purchase Order Date</label>
               <Input
                 type="date"
@@ -267,6 +289,7 @@ export default function InvoicesPage() {
                   payload: {
                     purchaseOrderNumber,
                     purchaseOrderDate,
+                    sac: conversionSac.trim(),
                   },
                 });
               }}

@@ -44,6 +44,7 @@ export interface DeleteInvoiceResult {
 export interface ConvertProformaToTaxInvoicePayload {
   purchaseOrderNumber: string;
   purchaseOrderDate: string;
+  sac?: string;
   invoiceDate?: string;
 }
 

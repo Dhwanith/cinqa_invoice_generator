@@ -6,7 +6,8 @@ import {
   buildInvoiceDocument,
   buildInvoiceNumber,
   calculateTaxBreakdown,
-  getFinancialYearLabel
+  getFinancialYearLabel,
+  renderInvoiceHtml
 } from '../src/index.js';
 
 test('financial year starts in april', () => {
@@ -138,4 +139,76 @@ test('buildInvoiceDocument preserves proforma conversion references', () => {
   assert.equal(invoice.sourceProforma?.invoiceDateDisplay, '05/04/2026');
   assert.equal(invoice.purchaseOrder?.number, 'PO-7781');
   assert.equal(invoice.purchaseOrder?.dateDisplay, '08/04/2026');
+});
+
+test('renderInvoiceHtml shows purchase order reference without source proforma block', () => {
+  const invoice = buildInvoiceDocument({
+    idempotencyKey: 'req-5',
+    invoiceDate: '2026-04-10',
+    sequence: 10,
+    invoiceType: 'tax',
+    sourceProforma: {
+      invoiceRecordId: 'recProforma123',
+      invoiceNo: 'CTS/26-27/PI/004',
+      invoiceDate: '2026-04-05'
+    },
+    purchaseOrder: {
+      number: 'PO-003',
+      date: '2026-04-21'
+    },
+    client: {
+      name: 'XYZ Pvt Ltd',
+      gstin: '24ABCDE1234F1Z5',
+      state: 'Gujarat',
+      stateCode: 24,
+      addressLines: ['Line 1']
+    },
+    lineItems: [{ description: 'Service A', sac: '998314', amount: 1000 }]
+  });
+
+  const html = renderInvoiceHtml(invoice);
+
+  assert.match(html, /PO Ref:\s*<\/span>&nbsp;<span class="po-ref-value">PO-003<\/span>/);
+  assert.match(html, /Dated:\s*<\/span>&nbsp;<span class="po-ref-value">21\/04\/2026<\/span>/);
+  assert.doesNotMatch(html, /Source Proforma/);
+});
+
+test('renderInvoiceHtml keeps the original meta panel layout when purchase order is absent', () => {
+  const taxInvoice = buildInvoiceDocument({
+    idempotencyKey: 'req-6',
+    invoiceDate: '2026-04-10',
+    sequence: 11,
+    invoiceType: 'tax',
+    client: {
+      name: 'XYZ Pvt Ltd',
+      gstin: '24ABCDE1234F1Z5',
+      state: 'Gujarat',
+      stateCode: 24,
+      addressLines: ['Line 1']
+    },
+    lineItems: [{ description: 'Service A', sac: '998314', amount: 1000 }]
+  });
+
+  const proformaInvoice = buildInvoiceDocument({
+    idempotencyKey: 'req-7',
+    invoiceDate: '2026-04-10',
+    sequence: 12,
+    invoiceType: 'proforma',
+    client: {
+      name: 'XYZ Pvt Ltd',
+      gstin: '24ABCDE1234F1Z5',
+      state: 'Gujarat',
+      stateCode: 24,
+      addressLines: ['Line 1']
+    },
+    lineItems: [{ description: 'Service A', sac: '998314', amount: 1000 }]
+  });
+
+  const taxHtml = renderInvoiceHtml(taxInvoice);
+  const proformaHtml = renderInvoiceHtml(proformaInvoice);
+
+  assert.doesNotMatch(taxHtml, /class="meta-card meta-card--compact"/);
+  assert.doesNotMatch(taxHtml, /class="meta-box meta-box--compact"/);
+  assert.doesNotMatch(proformaHtml, /class="meta-card meta-card--compact"/);
+  assert.doesNotMatch(proformaHtml, /class="meta-box meta-box--compact"/);
 });

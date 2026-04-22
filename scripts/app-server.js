@@ -942,7 +942,7 @@ function getTodayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function convertProformaToTaxInvoice({ invoiceId, purchaseOrderNumber, purchaseOrderDate, invoiceDate }) {
+async function convertProformaToTaxInvoice({ invoiceId, purchaseOrderNumber, purchaseOrderDate, invoiceDate, sac }) {
   const proformaInvoice = await getInvoiceDetail(invoiceId);
 
   if (proformaInvoice.invoiceType !== 'proforma') {
@@ -950,10 +950,17 @@ async function convertProformaToTaxInvoice({ invoiceId, purchaseOrderNumber, pur
   }
 
   const client = await resolveInvoiceClient(proformaInvoice);
+  const overrideSac = validateOptionalString(sac);
   const payload = buildInvoicePayload({
     invoiceDate: invoiceDate ? validateDateString(invoiceDate, 'Invoice Date') : getTodayIsoDate(),
     client,
-    lineItems: normalizeInvoiceLineItems(proformaInvoice.lineItems || [], Boolean(proformaInvoice.showQuantity)),
+    lineItems: normalizeInvoiceLineItems(
+      (proformaInvoice.lineItems || []).map((lineItem) => ({
+        ...lineItem,
+        ...(overrideSac ? { sac: overrideSac } : {})
+      })),
+      Boolean(proformaInvoice.showQuantity)
+    ),
     invoiceType: 'tax',
     showQuantity: Boolean(proformaInvoice.showQuantity),
     includeDueDate: true,
@@ -1119,7 +1126,8 @@ export function createApp() {
         invoiceId: request.params.invoiceId,
         purchaseOrderNumber: request.body.purchaseOrderNumber,
         purchaseOrderDate: request.body.purchaseOrderDate,
-        invoiceDate: validateOptionalString(request.body.invoiceDate)
+        invoiceDate: validateOptionalString(request.body.invoiceDate),
+        sac: request.body.sac
       });
 
       response.status(201).json({ ok: true, invoice });

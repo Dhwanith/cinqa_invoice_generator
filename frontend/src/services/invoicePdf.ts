@@ -8,6 +8,29 @@ const DARK: [number, number, number] = [40, 30, 22];
 const MUTED: [number, number, number] = [120, 100, 85];
 const LIGHT_BG: [number, number, number] = [248, 244, 237];
 
+function drawPurchaseOrderReference(doc: jsPDF, x: number, y: number, invoice: Invoice) {
+  if (!invoice.purchaseOrder?.number) {
+    return;
+  }
+
+  const purchaseOrderDate = invoice.purchaseOrder.date ? formatDate(invoice.purchaseOrder.date) : "-";
+  doc.setFont("helvetica", "bold");
+  doc.text("PO Ref:", x, y);
+  let cursor = x + doc.getTextWidth("PO Ref:");
+
+  doc.setFont("helvetica", "normal");
+  const referenceValue = ` ${invoice.purchaseOrder.number}; `;
+  doc.text(referenceValue, cursor, y);
+  cursor += doc.getTextWidth(referenceValue);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("Dated:", cursor, y);
+  cursor += doc.getTextWidth("Dated:");
+
+  doc.setFont("helvetica", "normal");
+  doc.text(` ${purchaseOrderDate}`, cursor, y);
+}
+
 function extractGoogleDriveFileId(invoice: Invoice): string | null {
   if (invoice.googleDriveFileId) {
     return invoice.googleDriveFileId;
@@ -108,8 +131,7 @@ export function generateInvoicePdf(invoice: Invoice): jsPDF {
   );
   let supplyOffset = 4;
   if (invoice.invoiceType !== "proforma" && invoice.purchaseOrder?.number) {
-    const purchaseOrderDate = invoice.purchaseOrder.date ? formatDate(invoice.purchaseOrder.date) : "-";
-    doc.text(`PO Ref: ${invoice.purchaseOrder.number}; Dated: ${purchaseOrderDate}`, sx, y + supplyOffset);
+    drawPurchaseOrderReference(doc, sx, y + supplyOffset, invoice);
     supplyOffset += 4;
   }
 

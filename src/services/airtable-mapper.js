@@ -13,6 +13,18 @@ export function mapInvoiceToAirtableFields(invoice) {
     'State Code': invoice.client.stateCode,
     'Place of Supply': invoice.placeOfSupply,
     ...(invoice.invoiceType === 'proforma' ? {} : { 'GST Type': invoice.gstType }),
+    ...(invoice.sourceProforma
+      ? {
+          'Source Proforma Invoice No': invoice.sourceProforma.invoiceNo,
+          'Source Proforma Invoice Date': invoice.sourceProforma.invoiceDate
+        }
+      : {}),
+    ...(invoice.purchaseOrder
+      ? {
+          'Purchase Order No': invoice.purchaseOrder.number,
+          'Purchase Order Date': invoice.purchaseOrder.date
+        }
+      : {}),
     Amount: invoice.amount,
     CGST: invoice.cgst,
     SGST: invoice.sgst,

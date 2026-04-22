@@ -27,6 +27,13 @@ function normalizePositiveAmount(value, fieldName) {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
+function normalizeDateString(value, fieldName) {
+  const normalized = normalizeTrimmedString(value, fieldName);
+  const date = new Date(normalized);
+  assert(!Number.isNaN(date.getTime()), `${fieldName} must be a valid date.`);
+  return normalized;
+}
+
 function calculateLineAmount(quantity, unitPrice) {
   return Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
 }
@@ -83,6 +90,35 @@ function normalizeLineItems(lineItems, { defaultSac, invoiceType, showQuantity }
   });
 }
 
+function normalizeConversionMetadata(payload, invoiceType) {
+  const sourceProforma = payload.sourceProforma;
+  const purchaseOrder = payload.purchaseOrder;
+  const hasSourceProforma = Boolean(sourceProforma);
+  const hasPurchaseOrder = Boolean(purchaseOrder);
+
+  if (!hasSourceProforma && !hasPurchaseOrder) {
+    return {
+      sourceProforma: null,
+      purchaseOrder: null
+    };
+  }
+
+  assert(invoiceType === 'tax', 'Proforma conversion metadata is only supported for tax invoices.');
+  assert(hasSourceProforma && hasPurchaseOrder, 'Both sourceProforma and purchaseOrder are required for proforma conversion.');
+
+  return {
+    sourceProforma: {
+      invoiceRecordId: normalizeOptionalTrimmedString(sourceProforma.invoiceRecordId, 'sourceProforma.invoiceRecordId'),
+      invoiceNo: normalizeTrimmedString(sourceProforma.invoiceNo, 'sourceProforma.invoiceNo'),
+      invoiceDate: normalizeDateString(sourceProforma.invoiceDate, 'sourceProforma.invoiceDate')
+    },
+    purchaseOrder: {
+      number: normalizeTrimmedString(purchaseOrder.number, 'purchaseOrder.number'),
+      date: normalizeDateString(purchaseOrder.date, 'purchaseOrder.date')
+    }
+  };
+}
+
 export function normalizeInvoiceRequest(payload) {
   assert(payload && typeof payload === 'object', 'Invoice payload must be an object.');
   assert(payload.client && typeof payload.client === 'object', 'client is required.');
@@ -97,6 +133,7 @@ export function normalizeInvoiceRequest(payload) {
   const invoiceType = normalizeInvoiceType(payload.invoiceType);
   const showQuantity = Boolean(payload.showQuantity);
   const includeDueDate = invoiceType === 'tax' ? true : Boolean(payload.includeDueDate);
+  const conversionMetadata = normalizeConversionMetadata(payload, invoiceType);
 
   const normalized = {
     idempotencyKey: normalizeTrimmedString(payload.idempotencyKey, 'idempotencyKey'),
@@ -105,6 +142,8 @@ export function normalizeInvoiceRequest(payload) {
     invoiceType,
     showQuantity,
     includeDueDate,
+    sourceProforma: conversionMetadata.sourceProforma,
+    purchaseOrder: conversionMetadata.purchaseOrder,
     client: {
       name: normalizeTrimmedString(payload.client.name, 'client.name'),
       gstin: validateGstin(payload.client.gstin, clientStateCode),

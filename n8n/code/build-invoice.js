@@ -124,6 +124,7 @@ const validated = $items('Hydrate Client Defaults', 0, 0)[0].json;
 const request = validated.request;
 const metadata = validated.metadata;
 const clientLinkField = env.AIRTABLE_FIELD_CLIENT_LINK || null;
+const sourceProformaLinkField = env.AIRTABLE_FIELD_PROFORMA_LINK || null;
 const sequenceLookup = $json.records ?? [];
 const sequenceRecord = sequenceLookup[0] ?? null;
 const lastSequence = Number(sequenceRecord?.fields?.['Last Sequence'] || 0);
@@ -131,6 +132,8 @@ const sequence = lastSequence + 1;
 const invoiceNo = buildInvoiceNumber(metadata.financialYear, sequence, request.invoiceType);
 const invoiceDate = new Date(request.invoiceDate);
 const dueDate = request.includeDueDate ? addDays(invoiceDate, metadata.paymentTermsDays) : null;
+const sourceProformaDate = request.sourceProforma ? new Date(request.sourceProforma.invoiceDate) : null;
+const purchaseOrderDate = request.purchaseOrder ? new Date(request.purchaseOrder.date) : null;
 const generatedStatusLabel = env.AIRTABLE_INVOICE_STATUS_GENERATED || 'generated';
 
 const lineItems = request.lineItems.map((lineItem) => {
@@ -202,6 +205,21 @@ const invoiceFields = {
   GSTIN: request.client.gstin,
   State: request.client.state,
   'State Code': request.client.stateCode,
+  ...(request.sourceProforma
+    ? {
+        ...(sourceProformaLinkField && request.sourceProforma.invoiceRecordId
+          ? { [sourceProformaLinkField]: [request.sourceProforma.invoiceRecordId] }
+          : {}),
+        'Source Proforma Invoice No': request.sourceProforma.invoiceNo,
+        'Source Proforma Invoice Date': request.sourceProforma.invoiceDate
+      }
+    : {}),
+  ...(request.purchaseOrder
+    ? {
+        'Purchase Order No': request.purchaseOrder.number,
+        'Purchase Order Date': request.purchaseOrder.date
+      }
+    : {}),
   'Place of Supply': placeOfSupply,
   ...(request.invoiceType === 'proforma' ? {} : { 'GST Type': lineItems[0].gstType }),
   Amount: totals.amount,
@@ -254,6 +272,18 @@ return [
         invoiceDateDisplay: formatDisplayDate(invoiceDate),
         dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : '',
         dueDateDisplay: dueDate ? formatDisplayDate(dueDate) : '',
+        sourceProforma: request.sourceProforma
+          ? {
+              ...request.sourceProforma,
+              invoiceDateDisplay: formatDisplayDate(sourceProformaDate)
+            }
+          : null,
+        purchaseOrder: request.purchaseOrder
+          ? {
+              ...request.purchaseOrder,
+              dateDisplay: formatDisplayDate(purchaseOrderDate)
+            }
+          : null,
         gstType: request.invoiceType === 'proforma' ? 'NONE' : lineItems[0].gstType,
         client: request.client,
         company,

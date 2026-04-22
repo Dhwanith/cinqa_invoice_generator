@@ -41,6 +41,12 @@ export interface DeleteInvoiceResult {
   deletedLineItems: number;
 }
 
+export interface ConvertProformaToTaxInvoicePayload {
+  purchaseOrderNumber: string;
+  purchaseOrderDate: string;
+  invoiceDate?: string;
+}
+
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, options);
   const data = (await response.json()) as ApiEnvelope<T>;
@@ -128,6 +134,15 @@ export async function updateInvoiceStatus(invoiceId: string, status: string): Pr
 
 export async function createInvoice(payload: { clientId: string; invoiceDate: string; invoiceType?: "tax" | "proforma"; showQuantity?: boolean; includeDueDate?: boolean; lineItems: LineItem[] }): Promise<CreateInvoiceResult> {
   const data = await requestJson<{ invoice: CreateInvoiceResult }>(`${API_BASE}/invoices`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return data.invoice;
+}
+
+export async function convertProformaToTaxInvoice(invoiceId: string, payload: ConvertProformaToTaxInvoicePayload): Promise<CreateInvoiceResult> {
+  const data = await requestJson<{ invoice: CreateInvoiceResult }>(`${API_BASE}/invoices/${invoiceId}/convert-to-tax`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

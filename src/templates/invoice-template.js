@@ -23,6 +23,40 @@ function renderLabeledStack(label, value, labelClass = 'label-text', valueClass 
   return `<span class="${labelClass}">${escapeHtml(label)}</span><br /><span class="${valueClass}">${escapeHtml(value)}</span>`;
 }
 
+function renderReferenceBoxes(invoice) {
+  if (invoice.invoiceType === 'proforma') {
+    return '';
+  }
+
+  const boxes = [];
+
+  if (invoice.sourceProforma?.invoiceNo || invoice.sourceProforma?.invoiceDate) {
+    boxes.push(`
+      <div class="meta-box">
+        <div class="meta-box-title">Source Proforma</div>
+        <div class="meta-box-value">${escapeHtml(invoice.sourceProforma.invoiceNo || '-')}</div>
+        <div class="meta-box-value">${escapeHtml(invoice.sourceProforma.invoiceDateDisplay || invoice.sourceProforma.invoiceDate || '-')}</div>
+      </div>
+    `);
+  }
+
+  if (invoice.purchaseOrder?.number || invoice.purchaseOrder?.date) {
+    boxes.push(`
+      <div class="meta-box">
+        <div class="meta-box-title">Purchase Order</div>
+        <div class="meta-box-value">${escapeHtml(invoice.purchaseOrder.number || '-')}</div>
+        <div class="meta-box-value">${escapeHtml(invoice.purchaseOrder.dateDisplay || invoice.purchaseOrder.date || '-')}</div>
+      </div>
+    `);
+  }
+
+  if (boxes.length === 0) {
+    return '';
+  }
+
+  return `<div class="meta-cards">${boxes.join('')}</div>`;
+}
+
 function getPriceColumnLabel(invoice) {
   return invoice.showQuantity ? 'Unit Price (₹)' : 'Price (₹)';
 }
@@ -558,6 +592,7 @@ export function renderInvoiceHtml(invoice) {
             </div>
             `}
           </div>
+          ${renderReferenceBoxes(invoice)}
         </div>
       </div>
 

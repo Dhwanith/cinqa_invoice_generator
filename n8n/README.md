@@ -22,6 +22,7 @@ This directory contains actual n8n workflow assets for the invoice automation fl
 Optional linked-record fields:
 
 - `AIRTABLE_FIELD_CLIENT_LINK`: set this only if your invoice table has a linked-record field to the clients table
+- `AIRTABLE_FIELD_PROFORMA_LINK`: set this only if your invoice table has a linked-record field back to the source proforma invoice
 - `AIRTABLE_FIELD_INVOICE_LINK`: set this only if your line-items table has a linked-record field to the invoices table
 
 ## Current Workflow Scope

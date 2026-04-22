@@ -39,6 +39,13 @@ function normalizePositiveAmount(value, fieldName) {
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
+function normalizeDateString(value, fieldName) {
+  const normalized = normalizeTrimmedString(value, fieldName);
+  const date = new Date(normalized);
+  assert(!Number.isNaN(date.getTime()), `${fieldName} must be a valid date.`);
+  return normalized;
+}
+
 function calculateLineAmount(quantity, unitPrice) {
   return Math.round((quantity * unitPrice + Number.EPSILON) * 100) / 100;
 }
@@ -94,6 +101,35 @@ function normalizeLineItems(lineItems, { defaultSac, invoiceType, showQuantity }
   });
 }
 
+function normalizeConversionMetadata(payload, invoiceType) {
+  const sourceProforma = payload.sourceProforma;
+  const purchaseOrder = payload.purchaseOrder;
+  const hasSourceProforma = Boolean(sourceProforma);
+  const hasPurchaseOrder = Boolean(purchaseOrder);
+
+  if (!hasSourceProforma && !hasPurchaseOrder) {
+    return {
+      sourceProforma: null,
+      purchaseOrder: null
+    };
+  }
+
+  assert(invoiceType === 'tax', 'Proforma conversion metadata is only supported for tax invoices.');
+  assert(hasSourceProforma && hasPurchaseOrder, 'Both sourceProforma and purchaseOrder are required for proforma conversion.');
+
+  return {
+    sourceProforma: {
+      invoiceRecordId: normalizeOptionalTrimmedString(sourceProforma.invoiceRecordId, 'sourceProforma.invoiceRecordId'),
+      invoiceNo: normalizeTrimmedString(sourceProforma.invoiceNo, 'sourceProforma.invoiceNo'),
+      invoiceDate: normalizeDateString(sourceProforma.invoiceDate, 'sourceProforma.invoiceDate')
+    },
+    purchaseOrder: {
+      number: normalizeTrimmedString(purchaseOrder.number, 'purchaseOrder.number'),
+      date: normalizeDateString(purchaseOrder.date, 'purchaseOrder.date')
+    }
+  };
+}
+
 function toDate(value) {
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   assert(!Number.isNaN(date.getTime()), `Invalid date value: ${value}`);
@@ -128,6 +164,7 @@ const idempotencyKey = normalizeTrimmedString(source.idempotencyKey, 'idempotenc
 const invoiceType = normalizeInvoiceType(source.invoiceType);
 const showQuantity = Boolean(source.showQuantity);
 const includeDueDate = invoiceType === 'tax' ? true : Boolean(source.includeDueDate);
+const conversionMetadata = normalizeConversionMetadata(source, invoiceType);
 const defaultSac =
   normalizeSacValue(source.defaultSac, 'defaultSac') ||
   normalizeSacValue(source.client.defaultSac, 'client.defaultSac') ||
@@ -140,6 +177,8 @@ const request = {
   invoiceType,
   showQuantity,
   includeDueDate,
+  sourceProforma: conversionMetadata.sourceProforma,
+  purchaseOrder: conversionMetadata.purchaseOrder,
   client: {
     name: normalizeTrimmedString(source.client.name, 'client.name'),
     gstin: validateGstin(source.client.gstin, clientStateCode),

@@ -32,6 +32,19 @@ export interface InvoiceLineItem extends LineItem {
   total: number;
 }
 
+export interface SourceProformaReference {
+  invoiceRecordId?: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  invoiceDateDisplay?: string;
+}
+
+export interface PurchaseOrderReference {
+  number: string;
+  date: string;
+  dateDisplay?: string;
+}
+
 export interface Invoice {
   id: string;
   invoiceNo: string;
@@ -42,10 +55,13 @@ export interface Invoice {
   title?: string;
   invoiceDate: string;
   dueDate: string;
+  clientRecordId?: string;
   clientName: string;
   gstin: string;
   state: string;
   stateCode: number;
+  sourceProforma?: SourceProformaReference | null;
+  purchaseOrder?: PurchaseOrderReference | null;
   placeOfSupply: string;
   gstType: string;
   amount: number;

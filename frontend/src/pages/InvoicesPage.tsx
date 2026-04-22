@@ -22,6 +22,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import InvoicePdfPreview from "@/components/InvoicePdfPreview";
 import { downloadInvoicePdf } from "@/services/invoicePdf";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { convertProformaToTaxInvoice } from "@/services/api";
 
 type InvoiceSortOption = "newest" | "oldest" | "amount-high" | "amount-low" | "invoice-asc" | "invoice-desc" | "client-asc" | "client-desc";
 
@@ -34,6 +43,9 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [pdfPreviewInvoice, setPdfPreviewInvoice] = useState<Invoice | null>(null);
   const [invoicePendingDelete, setInvoicePendingDelete] = useState<Invoice | null>(null);
+  const [invoicePendingConversion, setInvoicePendingConversion] = useState<Invoice | null>(null);
+  const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
+  const [purchaseOrderDate, setPurchaseOrderDate] = useState(new Date().toISOString().slice(0, 10));
 
   const { data: invoices = [], isLoading } = useQuery({
     queryKey: ["invoices", search, filter],
@@ -67,6 +79,27 @@ export default function InvoicesPage() {
       toast.error(error instanceof Error ? error.message : "Unable to delete invoice.");
     },
   });
+
+  const convertMutation = useMutation({
+    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: { purchaseOrderNumber: string; purchaseOrderDate: string } }) =>
+      convertProformaToTaxInvoice(invoiceId, payload),
+    onSuccess: (invoice) => {
+      toast.success(invoice.invoiceNo ? `Created ${invoice.invoiceNo}.` : "Tax invoice conversion requested.");
+      setInvoicePendingConversion(null);
+      setPurchaseOrderNumber("");
+      setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to convert proforma invoice.");
+    },
+  });
+
+  const openConversionDialog = (invoice: Invoice) => {
+    setInvoicePendingConversion(invoice);
+    setPurchaseOrderNumber("");
+    setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
+  };
 
   const sortedInvoices = useMemo(() => {
     const collator = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
@@ -172,6 +205,85 @@ export default function InvoicesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <Dialog
+        open={Boolean(invoicePendingConversion)}
+        onOpenChange={(open) => {
+          if (!open && !convertMutation.isPending) {
+            setInvoicePendingConversion(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to tax invoice</DialogTitle>
+            <DialogDescription>
+              {invoicePendingConversion
+                ? `Create a tax invoice from ${invoicePendingConversion.invoiceNo} using the same client and line items.`
+                : "Create a tax invoice from this proforma invoice."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Purchase Order No</label>
+              <Input
+                value={purchaseOrderNumber}
+                onChange={(event) => setPurchaseOrderNumber(event.target.value)}
+                placeholder="PO-7781"
+                disabled={convertMutation.isPending}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Purchase Order Date</label>
+              <Input
+                type="date"
+                value={purchaseOrderDate}
+                onChange={(event) => setPurchaseOrderDate(event.target.value)}
+                disabled={convertMutation.isPending}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setInvoicePendingConversion(null)}
+              disabled={convertMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="gradient-warm text-primary-foreground border-0"
+              disabled={convertMutation.isPending || !invoicePendingConversion || !purchaseOrderNumber.trim() || !purchaseOrderDate}
+              onClick={() => {
+                if (!invoicePendingConversion) {
+                  return;
+                }
+
+                convertMutation.mutate({
+                  invoiceId: invoicePendingConversion.id,
+                  payload: {
+                    purchaseOrderNumber,
+                    purchaseOrderDate,
+                  },
+                });
+              }}
+            >
+              {convertMutation.isPending ? (
+                <>
+                  <LoaderCircle size={16} className="animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                "Create Tax Invoice"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex flex-col lg:flex-row gap-3 mb-6">
         <div className="relative flex-1">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -262,6 +374,18 @@ export default function InvoicesPage() {
                     <p><span className="text-muted-foreground">Place of Supply:</span> {selectedInvoice.placeOfSupply}</p>
                     {selectedInvoice.invoiceType === "proforma" && <p><span className="text-muted-foreground">Due Date:</span> {selectedInvoice.includeDueDate === false ? "Hidden" : formatDate(selectedInvoice.dueDate)}</p>}
                     {selectedInvoice.invoiceType !== "proforma" && <p><span className="text-muted-foreground">Reverse Charge:</span> {selectedInvoice.reverseCharge}</p>}
+                    {selectedInvoice.sourceProforma && (
+                      <p>
+                        <span className="text-muted-foreground">Proforma:</span> {selectedInvoice.sourceProforma.invoiceNo}
+                        {selectedInvoice.sourceProforma.invoiceDate ? ` · ${formatDate(selectedInvoice.sourceProforma.invoiceDate)}` : ""}
+                      </p>
+                    )}
+                    {selectedInvoice.purchaseOrder && (
+                      <p>
+                        <span className="text-muted-foreground">Purchase Order:</span> {selectedInvoice.purchaseOrder.number}
+                        {selectedInvoice.purchaseOrder.date ? ` · ${formatDate(selectedInvoice.purchaseOrder.date)}` : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -270,6 +394,11 @@ export default function InvoicesPage() {
 
               <div className="flex flex-wrap gap-2 mt-4">
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => loadInvoiceDetail(selectedInvoice.id, "reuse")}>Reuse Items</Button>
+                {selectedInvoice.invoiceType === "proforma" && (
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(selectedInvoice)}>
+                    Convert to Tax Invoice
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "sent" })}>Mark Sent</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "paid" })}>Mark Paid</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(selectedInvoice)}>
@@ -310,6 +439,11 @@ export default function InvoicesPage() {
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => downloadInvoicePdf(invoice)}>
                   <FileDown size={12} /> PDF
                 </Button>
+                {invoice.invoiceType === "proforma" && (
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(invoice)}>
+                    Convert to Tax Invoice
+                  </Button>
+                )}
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "sent" })}>Mark Sent</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "paid" })}>Mark Paid</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(invoice)}>

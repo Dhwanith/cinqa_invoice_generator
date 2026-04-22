@@ -356,8 +356,28 @@ function normalizeClientFields(fields, recordId) {
   };
 }
 
+function getLinkedRecordId(fields, fieldName) {
+  if (!fieldName) {
+    return '';
+  }
+
+  const value = fields[fieldName];
+  if (!Array.isArray(value) || value.length === 0) {
+    return '';
+  }
+
+  return String(value[0] || '');
+}
+
 function normalizeInvoiceSummary(record) {
   const fields = record.fields || {};
+  const clientLinkField = getEnv('AIRTABLE_FIELD_CLIENT_LINK');
+  const sourceProformaLinkField = getEnv('AIRTABLE_FIELD_PROFORMA_LINK');
+  const sourceProformaInvoiceNo = fields['Source Proforma Invoice No'] || '';
+  const sourceProformaInvoiceDate = fields['Source Proforma Invoice Date'] || '';
+  const purchaseOrderNo = fields['Purchase Order No'] || '';
+  const purchaseOrderDate = fields['Purchase Order Date'] || '';
+
   return {
     id: record.id,
     invoiceNo: fields['Invoice No'] || '',
@@ -372,10 +392,26 @@ function normalizeInvoiceSummary(record) {
         : fields['Include Due Date'] === true || String(fields['Include Due Date']).toLowerCase() === 'true',
     invoiceDate: fields['Invoice Date'] || '',
     dueDate: fields['Due Date'] || '',
+    clientRecordId: getLinkedRecordId(fields, clientLinkField),
     clientName: fields['Client Name'] || fields.Client || '',
     gstin: fields.GSTIN || '',
     state: fields.State || '',
     stateCode: Number(fields['State Code'] || 0),
+    sourceProforma:
+      sourceProformaInvoiceNo || sourceProformaInvoiceDate || getLinkedRecordId(fields, sourceProformaLinkField)
+        ? {
+            invoiceRecordId: getLinkedRecordId(fields, sourceProformaLinkField),
+            invoiceNo: sourceProformaInvoiceNo,
+            invoiceDate: sourceProformaInvoiceDate
+          }
+        : null,
+    purchaseOrder:
+      purchaseOrderNo || purchaseOrderDate
+        ? {
+            number: purchaseOrderNo,
+            date: purchaseOrderDate
+          }
+        : null,
     placeOfSupply: fields['Place of Supply'] || '',
     gstType: fields['GST Type'] || '',
     amount: Number(fields.Amount || 0),
@@ -443,6 +479,16 @@ function validateTrimmedString(value, fieldName) {
   }
 
   return value.trim();
+}
+
+function validateDateString(value, fieldName) {
+  const normalized = validateTrimmedString(value, fieldName);
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) {
+    throw new HttpError(400, `${fieldName} must be a valid date.`);
+  }
+
+  return normalized;
 }
 
 function validateOptionalString(value) {
@@ -585,6 +631,18 @@ async function getClientRecord(clientId) {
   const tableName = getAirtableTableName('clients');
   const record = await airtableRequest(`${buildAirtableTableUrl(tableName)}/${clientId}`);
   return normalizeClientFields(record.fields || {}, record.id);
+}
+
+async function getClientRecordByGstin(gstin) {
+  const tableName = getAirtableTableName('clients');
+  const query = new URLSearchParams();
+  query.set('pageSize', '1');
+  query.set('filterByFormula', `{GSTIN} = "${escapeFormulaValue(gstin)}"`);
+
+  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
+  const record = response.records?.[0];
+
+  return record ? normalizeClientFields(record.fields || {}, record.id) : null;
 }
 
 async function createClient(payload) {
@@ -774,7 +832,16 @@ function normalizeInvoiceLineItems(lineItems, showQuantity) {
   }));
 }
 
-function buildInvoicePayload({ invoiceDate, client, lineItems, invoiceType, showQuantity, includeDueDate }) {
+function buildInvoicePayload({
+  invoiceDate,
+  client,
+  lineItems,
+  invoiceType,
+  showQuantity,
+  includeDueDate,
+  sourceProforma = null,
+  purchaseOrder = null
+}) {
   return normalizeInvoiceRequest({
     idempotencyKey: `ui-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
     invoiceDate,
@@ -782,6 +849,8 @@ function buildInvoicePayload({ invoiceDate, client, lineItems, invoiceType, show
     invoiceType,
     showQuantity,
     includeDueDate,
+    ...(sourceProforma ? { sourceProforma } : {}),
+    ...(purchaseOrder ? { purchaseOrder } : {}),
     client: {
       name: client.name,
       gstin: client.gstin,
@@ -795,24 +864,13 @@ function buildInvoicePayload({ invoiceDate, client, lineItems, invoiceType, show
   });
 }
 
-async function createInvoiceFromClient({ clientId, invoiceDate, lineItems, invoiceType, showQuantity, includeDueDate }) {
+async function postCreateInvoiceWebhook(payload) {
   const createInvoiceWebhookUrl = getConfiguredInvoiceWebhookUrl();
   if (!createInvoiceWebhookUrl) {
     throw new HttpError(500, 'Create invoice webhook URL is not configured.');
   }
 
   const webhookSecret = getEnv('N8N_WEBHOOK_SECRET');
-
-  const client = await getClientRecord(clientId);
-  const payload = buildInvoicePayload({
-    invoiceDate: validateTrimmedString(invoiceDate, 'Invoice Date'),
-    client,
-    lineItems: normalizeInvoiceLineItems(lineItems, Boolean(showQuantity)),
-    invoiceType,
-    showQuantity,
-    includeDueDate
-  });
-
   const response = await fetch(createInvoiceWebhookUrl, {
     method: 'POST',
     headers: {
@@ -849,6 +907,68 @@ async function createInvoiceFromClient({ clientId, invoiceDate, lineItems, invoi
     status: 'accepted',
     rawResponse: responseText
   };
+}
+
+async function createInvoiceFromClient({ clientId, invoiceDate, lineItems, invoiceType, showQuantity, includeDueDate }) {
+  const client = await getClientRecord(clientId);
+  const payload = buildInvoicePayload({
+    invoiceDate: validateTrimmedString(invoiceDate, 'Invoice Date'),
+    client,
+    lineItems: normalizeInvoiceLineItems(lineItems, Boolean(showQuantity)),
+    invoiceType,
+    showQuantity,
+    includeDueDate
+  });
+
+  return postCreateInvoiceWebhook(payload);
+}
+
+async function resolveInvoiceClient(invoice) {
+  if (invoice.clientRecordId) {
+    return getClientRecord(invoice.clientRecordId);
+  }
+
+  if (invoice.gstin) {
+    const client = await getClientRecordByGstin(invoice.gstin);
+    if (client) {
+      return client;
+    }
+  }
+
+  throw new HttpError(409, `Unable to resolve the client record for ${invoice.invoiceNo}. Link the invoice to a client or ensure GSTIN matches a client record.`);
+}
+
+function getTodayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function convertProformaToTaxInvoice({ invoiceId, purchaseOrderNumber, purchaseOrderDate, invoiceDate }) {
+  const proformaInvoice = await getInvoiceDetail(invoiceId);
+
+  if (proformaInvoice.invoiceType !== 'proforma') {
+    throw new HttpError(400, 'Only proforma invoices can be converted to tax invoices.');
+  }
+
+  const client = await resolveInvoiceClient(proformaInvoice);
+  const payload = buildInvoicePayload({
+    invoiceDate: invoiceDate ? validateDateString(invoiceDate, 'Invoice Date') : getTodayIsoDate(),
+    client,
+    lineItems: normalizeInvoiceLineItems(proformaInvoice.lineItems || [], Boolean(proformaInvoice.showQuantity)),
+    invoiceType: 'tax',
+    showQuantity: Boolean(proformaInvoice.showQuantity),
+    includeDueDate: true,
+    sourceProforma: {
+      invoiceRecordId: proformaInvoice.id,
+      invoiceNo: proformaInvoice.invoiceNo,
+      invoiceDate: validateDateString(proformaInvoice.invoiceDate, 'Source Proforma Invoice Date')
+    },
+    purchaseOrder: {
+      number: validateTrimmedString(purchaseOrderNumber, 'Purchase Order No'),
+      date: validateDateString(purchaseOrderDate, 'Purchase Order Date')
+    }
+  });
+
+  return postCreateInvoiceWebhook(payload);
 }
 
 function handleRoute(handler) {
@@ -986,6 +1106,20 @@ export function createApp() {
         invoiceType: request.body.invoiceType,
         showQuantity: request.body.showQuantity,
         includeDueDate: request.body.includeDueDate
+      });
+
+      response.status(201).json({ ok: true, invoice });
+    })
+  );
+
+  app.post(
+    '/api/invoices/:invoiceId/convert-to-tax',
+    handleRoute(async (request, response) => {
+      const invoice = await convertProformaToTaxInvoice({
+        invoiceId: request.params.invoiceId,
+        purchaseOrderNumber: request.body.purchaseOrderNumber,
+        purchaseOrderDate: request.body.purchaseOrderDate,
+        invoiceDate: validateOptionalString(request.body.invoiceDate)
       });
 
       response.status(201).json({ ok: true, invoice });

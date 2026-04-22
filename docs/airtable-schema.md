@@ -17,6 +17,11 @@ Recommended fields:
 - `GSTIN` - single line text
 - `State` - single line text
 - `State Code` - number
+- `Proforma Invoice Record` - optional link to `Invoices` for converted tax invoices
+- `Source Proforma Invoice No` - single line text
+- `Source Proforma Invoice Date` - date
+- `Purchase Order No` - single line text
+- `Purchase Order Date` - date
 - `Place of Supply` - formula or text
 - `GST Type` - single select
 - `Amount` - currency
@@ -89,11 +94,13 @@ The current workflow supports two Airtable modes:
 Recommended linked-record field names:
 
 - In `Invoices`: `Client Record` linked to `Clients`
+- In `Invoices`: `Proforma Invoice Record` linked to `Invoices`
 - In `Invoice Line Items`: `Invoice Record` linked to `Invoices`
 
 Recommended env values for linked-record mode:
 
 - `AIRTABLE_FIELD_CLIENT_LINK=Client Record`
+- `AIRTABLE_FIELD_PROFORMA_LINK=Proforma Invoice Record`
 - `AIRTABLE_FIELD_INVOICE_LINK=Invoice Record`
 
 Important constraints:

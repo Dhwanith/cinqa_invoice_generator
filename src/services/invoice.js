@@ -14,6 +14,8 @@ export function buildInvoiceDocument(payload, overrides = {}) {
   const invoiceDate = new Date(request.invoiceDate);
   const dueDate = request.includeDueDate ? addDays(invoiceDate, paymentTermsDays) : null;
   const invoiceNo = buildInvoiceNumber({ date: invoiceDate, sequence: request.sequence, invoiceType: request.invoiceType });
+  const sourceProformaDate = request.sourceProforma ? new Date(request.sourceProforma.invoiceDate) : null;
+  const purchaseOrderDate = request.purchaseOrder ? new Date(request.purchaseOrder.date) : null;
 
   const lineItems = request.lineItems.map((lineItem) => {
     if (request.invoiceType === 'proforma') {
@@ -56,6 +58,18 @@ export function buildInvoiceDocument(payload, overrides = {}) {
     invoiceDateDisplay: formatDisplayDate(invoiceDate),
     dueDate: dueDate ? dueDate.toISOString().slice(0, 10) : '',
     dueDateDisplay: dueDate ? formatDisplayDate(dueDate) : '',
+    sourceProforma: request.sourceProforma
+      ? {
+          ...request.sourceProforma,
+          invoiceDateDisplay: formatDisplayDate(sourceProformaDate)
+        }
+      : null,
+    purchaseOrder: request.purchaseOrder
+      ? {
+          ...request.purchaseOrder,
+          dateDisplay: formatDisplayDate(purchaseOrderDate)
+        }
+      : null,
     placeOfSupply: `${request.client.state} (${String(request.client.stateCode).padStart(2, '0')})`,
     gstType: request.invoiceType === 'proforma' ? 'NONE' : lineItems[0].gstType,
     client: request.client,

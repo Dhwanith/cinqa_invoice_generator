@@ -112,7 +112,24 @@ export function generateInvoicePdf(invoice: Invoice): jsPDF {
     doc.text(`SAC: ${invoice.sac}`, sx, y + 12);
   }
 
-  y += 22;
+  const referenceLines: string[] = [];
+  if (invoice.sourceProforma?.invoiceNo) {
+    referenceLines.push(`Proforma: ${invoice.sourceProforma.invoiceNo}`);
+  }
+  if (invoice.sourceProforma?.invoiceDate) {
+    referenceLines.push(`Proforma Date: ${formatDate(invoice.sourceProforma.invoiceDate)}`);
+  }
+  if (invoice.purchaseOrder?.number) {
+    referenceLines.push(`PO No: ${invoice.purchaseOrder.number}`);
+  }
+  if (invoice.purchaseOrder?.date) {
+    referenceLines.push(`PO Date: ${formatDate(invoice.purchaseOrder.date)}`);
+  }
+  referenceLines.forEach((line, index) => {
+    doc.text(line, sx, y + 16 + index * 4);
+  });
+
+  y += 22 + referenceLines.length * 4;
 
   // ── Line Items Table ──
   const lineItems = invoice.lineItems || [];

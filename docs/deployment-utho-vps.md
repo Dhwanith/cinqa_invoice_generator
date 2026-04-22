@@ -37,6 +37,8 @@ AIRTABLE_BASE_ID=replace-me
 AIRTABLE_TABLE_CLIENTS=clients
 AIRTABLE_TABLE_INVOICES=invoices
 AIRTABLE_TABLE_LINE_ITEMS=invoice_line_items
+AIRTABLE_FIELD_CLIENT_LINK=Client Record
+AIRTABLE_FIELD_PROFORMA_LINK=Proforma Invoice Record
 
 # Optional, only if hosted n8n validation enforces the header.
 N8N_WEBHOOK_SECRET=replace-me
@@ -55,8 +57,9 @@ AIRTABLE_TABLE_CLIENTS=clients
 AIRTABLE_TABLE_INVOICES=invoices
 AIRTABLE_TABLE_LINE_ITEMS=invoice_line_items
 AIRTABLE_TABLE_SEQUENCES=invoice_sequences
-AIRTABLE_FIELD_CLIENT_LINK=
-AIRTABLE_FIELD_INVOICE_LINK=
+AIRTABLE_FIELD_CLIENT_LINK=Client Record
+AIRTABLE_FIELD_INVOICE_LINK=Invoice Record
+AIRTABLE_FIELD_PROFORMA_LINK=Proforma Invoice Record
 AIRTABLE_INVOICE_STATUS_GENERATED=Generated
 
 PDF_SERVICE_URL=https://pdf-internal.cinqa.space
@@ -119,7 +122,7 @@ The original `docker-compose.yml` is still suitable for self-contained local Doc
    - Remove old local-n8n values such as `WEBHOOK_URL=https://n8nlocal...`.
    - Set `CREATE_INVOICE_WEBHOOK_URL=https://n8n.cinqa.space/webhook/create-invoice`.
    - Set `APP_COOKIE_SECURE=true` and `APP_TRUST_PROXY=1`.
-   - Set Airtable, app auth, and optional `N8N_WEBHOOK_SECRET` values.
+   - Set Airtable, app auth, optional `N8N_WEBHOOK_SECRET`, and linked-field values such as `AIRTABLE_FIELD_CLIENT_LINK=Client Record`.
 
 5. Configure Nginx for both domains.
 
@@ -192,6 +195,8 @@ curl http://127.0.0.1:8001/health
 - `CREATE_INVOICE_WEBHOOK_URL` points to hosted n8n, not a local container hostname
 - `APP_COOKIE_SECURE=true`
 - `APP_TRUST_PROXY=1`
+- `AIRTABLE_FIELD_CLIENT_LINK` on the VPS matches the linked client field name in Airtable if you use linked records
+- `AIRTABLE_FIELD_PROFORMA_LINK` on the VPS and hosted n8n matches the linked proforma field name if you created it
 - `PDF_SERVICE_URL` in hosted n8n points to a URL hosted n8n can actually reach
 - `N8N_WEBHOOK_SECRET` is either configured in both places or in neither place
 - `AIRTABLE_TABLE_SEQUENCES` exists in hosted n8n env

@@ -106,30 +106,20 @@ export function generateInvoicePdf(invoice: Invoice): jsPDF {
     sx,
     y
   );
-  doc.text(invoice.invoiceType === "proforma" ? `SAC: ${invoice.sac || "-"}` : `GST Type: ${invoice.gstType}`, sx, y + 4);
-  doc.text(invoice.invoiceType === "proforma" ? "Taxes: Not applicable" : `Reverse Charge: ${invoice.reverseCharge}`, sx, y + 8);
+  let supplyOffset = 4;
+  if (invoice.invoiceType !== "proforma" && invoice.purchaseOrder?.number) {
+    const purchaseOrderDate = invoice.purchaseOrder.date ? formatDate(invoice.purchaseOrder.date) : "-";
+    doc.text(`PO Ref: ${invoice.purchaseOrder.number}; Dated: ${purchaseOrderDate}`, sx, y + supplyOffset);
+    supplyOffset += 4;
+  }
+
+  doc.text(invoice.invoiceType === "proforma" ? `SAC: ${invoice.sac || "-"}` : `GST Type: ${invoice.gstType}`, sx, y + supplyOffset);
+  doc.text(invoice.invoiceType === "proforma" ? "Taxes: Not applicable" : `Reverse Charge: ${invoice.reverseCharge}`, sx, y + supplyOffset + 4);
   if (invoice.invoiceType !== "proforma") {
-    doc.text(`SAC: ${invoice.sac}`, sx, y + 12);
+    doc.text(`SAC: ${invoice.sac}`, sx, y + supplyOffset + 8);
   }
 
-  const referenceLines: string[] = [];
-  if (invoice.sourceProforma?.invoiceNo) {
-    referenceLines.push(`Proforma: ${invoice.sourceProforma.invoiceNo}`);
-  }
-  if (invoice.sourceProforma?.invoiceDate) {
-    referenceLines.push(`Proforma Date: ${formatDate(invoice.sourceProforma.invoiceDate)}`);
-  }
-  if (invoice.purchaseOrder?.number) {
-    referenceLines.push(`PO No: ${invoice.purchaseOrder.number}`);
-  }
-  if (invoice.purchaseOrder?.date) {
-    referenceLines.push(`PO Date: ${formatDate(invoice.purchaseOrder.date)}`);
-  }
-  referenceLines.forEach((line, index) => {
-    doc.text(line, sx, y + 16 + index * 4);
-  });
-
-  y += 22 + referenceLines.length * 4;
+  y += 22 + (supplyOffset - 4);
 
   // ── Line Items Table ──
   const lineItems = invoice.lineItems || [];

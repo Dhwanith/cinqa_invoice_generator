@@ -23,38 +23,13 @@ function renderLabeledStack(label, value, labelClass = 'label-text', valueClass 
   return `<span class="${labelClass}">${escapeHtml(label)}</span><br /><span class="${valueClass}">${escapeHtml(value)}</span>`;
 }
 
-function renderReferenceBoxes(invoice) {
-  if (invoice.invoiceType === 'proforma') {
+function renderPurchaseOrderReference(invoice) {
+  if (invoice.invoiceType === 'proforma' || !invoice.purchaseOrder?.number) {
     return '';
   }
 
-  const boxes = [];
-
-  if (invoice.sourceProforma?.invoiceNo || invoice.sourceProforma?.invoiceDate) {
-    boxes.push(`
-      <div class="meta-box">
-        <div class="meta-box-title">Source Proforma</div>
-        <div class="meta-box-value">${escapeHtml(invoice.sourceProforma.invoiceNo || '-')}</div>
-        <div class="meta-box-value">${escapeHtml(invoice.sourceProforma.invoiceDateDisplay || invoice.sourceProforma.invoiceDate || '-')}</div>
-      </div>
-    `);
-  }
-
-  if (invoice.purchaseOrder?.number || invoice.purchaseOrder?.date) {
-    boxes.push(`
-      <div class="meta-box">
-        <div class="meta-box-title">Purchase Order</div>
-        <div class="meta-box-value">${escapeHtml(invoice.purchaseOrder.number || '-')}</div>
-        <div class="meta-box-value">${escapeHtml(invoice.purchaseOrder.dateDisplay || invoice.purchaseOrder.date || '-')}</div>
-      </div>
-    `);
-  }
-
-  if (boxes.length === 0) {
-    return '';
-  }
-
-  return `<div class="meta-cards">${boxes.join('')}</div>`;
+  const purchaseOrderDate = invoice.purchaseOrder.dateDisplay || invoice.purchaseOrder.date || '-';
+  return `<div class="meta-card meta-card--compact">${escapeHtml(`PO Ref: ${invoice.purchaseOrder.number}; Dated: ${purchaseOrderDate}`)}</div>`;
 }
 
 function getPriceColumnLabel(invoice) {
@@ -326,6 +301,11 @@ export function renderInvoiceHtml(invoice) {
         justify-content: center;
         text-align: center;
       }
+      .meta-card--compact {
+        min-height: 30px;
+        padding: 8px 14px;
+        margin-bottom: 8px;
+      }
       .meta-cards {
         align-items: stretch;
       }
@@ -338,6 +318,10 @@ export function renderInvoiceHtml(invoice) {
         flex-direction: column;
         align-items: center;
         justify-content: center;
+      }
+      .meta-box--compact {
+        min-height: 64px;
+        padding: 10px 10px;
       }
       .meta-box-title {
         font-size: 12px;
@@ -580,19 +564,19 @@ export function renderInvoiceHtml(invoice) {
           <div class="bill-gstin">${renderLabeledInline('GSTIN: ', invoice.client.gstin)}</div>
         </div>
         <div class="meta-panel">
-          <div class="meta-card">${renderLabeledInline('Invoice No: ', invoice.invoiceNo)}</div>
-          <div class="meta-card">${renderLabeledInline(invoice.invoiceType === 'proforma' ? 'Invoice Type: ' : 'Place of Supply: ', invoice.invoiceType === 'proforma' ? 'Proforma Invoice' : invoice.placeOfSupply)}</div>
+          <div class="meta-card meta-card--compact">${renderLabeledInline('Invoice No: ', invoice.invoiceNo)}</div>
+          <div class="meta-card meta-card--compact">${renderLabeledInline(invoice.invoiceType === 'proforma' ? 'Invoice Type: ' : 'Place of Supply: ', invoice.invoiceType === 'proforma' ? 'Proforma Invoice' : invoice.placeOfSupply)}</div>
+          ${renderPurchaseOrderReference(invoice)}
           <div class="meta-cards">
-            <div class="meta-box">
+            <div class="meta-box meta-box--compact">
               <div class="meta-box-title">${renderLabeledStack(invoice.invoiceType === 'proforma' ? 'Issue Date: ' : 'Invoice Date: ', invoice.invoiceDateDisplay)}</div>
             </div>
             ${invoice.includeDueDate === false ? '' : `
-            <div class="meta-box">
+            <div class="meta-box meta-box--compact">
               <div class="meta-box-title">${renderLabeledStack('Due Date: ', invoice.dueDateDisplay)}</div>
             </div>
             `}
           </div>
-          ${renderReferenceBoxes(invoice)}
         </div>
       </div>
 

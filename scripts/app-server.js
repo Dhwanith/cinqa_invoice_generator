@@ -745,9 +745,9 @@ async function deleteInvoice(invoiceId) {
 
 function validateInvoiceStatus(status) {
   const normalizedStatus = validateTrimmedString(status, 'Status').toLowerCase();
-  const allowedStatuses = new Set(['generated', 'sent', 'paid']);
+  const allowedStatuses = new Set(['generated', 'pending', 'sent', 'paid']);
   if (!allowedStatuses.has(normalizedStatus)) {
-    throw new HttpError(400, 'Status must be one of: generated, sent, paid.');
+    throw new HttpError(400, 'Status must be one of: generated, pending, sent, paid.');
   }
 
   return normalizedStatus;

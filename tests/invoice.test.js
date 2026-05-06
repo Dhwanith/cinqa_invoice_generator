@@ -16,8 +16,8 @@ test('financial year starts in april', () => {
 });
 
 test('invoice number format matches required convention', () => {
-  assert.equal(buildInvoiceNumber({ date: '2026-04-04', sequence: 1 }), 'CTS/26-27/INV/001');
-  assert.equal(buildInvoiceNumber({ date: '2026-04-04', sequence: 1, invoiceType: 'proforma' }), 'CTS/26-27/PI/001');
+  assert.equal(buildInvoiceNumber({ date: '2026-04-04', sequence: 1 }), 'CTS/26-27/INV001');
+  assert.equal(buildInvoiceNumber({ date: '2026-04-04', sequence: 1, invoiceType: 'proforma' }), 'CTS/26-27/PI001');
 });
 
 test('same-state tax splits into cgst and sgst', () => {
@@ -64,7 +64,7 @@ test('buildInvoiceDocument aggregates multiple line items', () => {
     ]
   });
 
-  assert.equal(invoice.invoiceNo, 'CTS/26-27/INV/007');
+  assert.equal(invoice.invoiceNo, 'CTS/26-27/INV007');
   assert.equal(invoice.amount, 150000);
   assert.equal(invoice.cgst, 13500);
   assert.equal(invoice.sgst, 13500);
@@ -89,7 +89,7 @@ test('buildInvoiceDocument uses proforma sequence format', () => {
     lineItems: [{ description: 'Service A', sac: '998314', amount: 100000 }]
   });
 
-  assert.equal(invoice.invoiceNo, 'CTS/26-27/PI/003');
+  assert.equal(invoice.invoiceNo, 'CTS/26-27/PI003');
 });
 
 test('buildInvoiceDocument preserves a third client address line', () => {
@@ -118,7 +118,7 @@ test('buildInvoiceDocument preserves proforma conversion references', () => {
     invoiceType: 'tax',
     sourceProforma: {
       invoiceRecordId: 'recProforma123',
-      invoiceNo: 'CTS/26-27/PI/004',
+      invoiceNo: 'CTS/26-27/PI004',
       invoiceDate: '2026-04-05'
     },
     purchaseOrder: {
@@ -135,7 +135,7 @@ test('buildInvoiceDocument preserves proforma conversion references', () => {
     lineItems: [{ description: 'Service A', sac: '998314', amount: 1000 }]
   });
 
-  assert.equal(invoice.sourceProforma?.invoiceNo, 'CTS/26-27/PI/004');
+  assert.equal(invoice.sourceProforma?.invoiceNo, 'CTS/26-27/PI004');
   assert.equal(invoice.sourceProforma?.invoiceDateDisplay, '05/04/2026');
   assert.equal(invoice.purchaseOrder?.number, 'PO-7781');
   assert.equal(invoice.purchaseOrder?.dateDisplay, '08/04/2026');
@@ -149,7 +149,7 @@ test('renderInvoiceHtml shows purchase order reference without source proforma b
     invoiceType: 'tax',
     sourceProforma: {
       invoiceRecordId: 'recProforma123',
-      invoiceNo: 'CTS/26-27/PI/004',
+      invoiceNo: 'CTS/26-27/PI004',
       invoiceDate: '2026-04-05'
     },
     purchaseOrder: {

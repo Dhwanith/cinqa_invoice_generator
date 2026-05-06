@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 
 const statusStyles: Record<string, string> = {
   generated: "bg-accent text-accent-foreground",
+  pending: "bg-amber-500/15 text-amber-600",
   sent: "bg-primary/10 text-primary",
   paid: "bg-success/15 text-success",
   active: "bg-success/15 text-success",

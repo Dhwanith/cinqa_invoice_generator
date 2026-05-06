@@ -333,7 +333,7 @@ export default function InvoicesPage() {
           </select>
         </div>
         <div className="flex gap-1.5 bg-muted rounded-xl p-1 overflow-x-auto">
-          {(["all", "generated", "sent", "paid"] as const).map((option) => (
+          {(["all", "generated", "pending", "sent", "paid"] as const).map((option) => (
             <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               {option}
             </button>
@@ -424,8 +424,9 @@ export default function InvoicesPage() {
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "sent" })}>Mark Sent</Button>
-                <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "paid" })}>Mark Paid</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "pending" ? "border-amber-500 text-amber-600 bg-amber-500/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "pending" })}>Mark Pending</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "sent" ? "border-primary text-primary bg-primary/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "sent" })}>Mark Sent</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "paid" ? "border-success text-success bg-success/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "paid" })}>Mark Paid</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(selectedInvoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>
@@ -469,8 +470,9 @@ export default function InvoicesPage() {
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "sent" })}>Mark Sent</Button>
-                <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "paid" })}>Mark Paid</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "pending" ? "border-amber-500 text-amber-600 bg-amber-500/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "pending" })}>Mark Pending</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "sent" ? "border-primary text-primary bg-primary/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "sent" })}>Mark Sent</Button>
+                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "paid" ? "border-success text-success bg-success/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "paid" })}>Mark Paid</Button>
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(invoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>

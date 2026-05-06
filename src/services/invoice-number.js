@@ -14,5 +14,5 @@ export function formatInvoiceSequence(sequence) {
 
 export function buildInvoiceNumber({ date, sequence, prefix = 'CTS', invoiceType = 'tax' }) {
   const financialYear = getFinancialYearLabel(date);
-  return `${prefix}/${financialYear}/${getInvoiceNumberCode(invoiceType)}/${formatInvoiceSequence(sequence)}`;
+  return `${prefix}/${financialYear}/${getInvoiceNumberCode(invoiceType)}${formatInvoiceSequence(sequence)}`;
 }

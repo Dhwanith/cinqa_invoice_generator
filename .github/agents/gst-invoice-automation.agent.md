@@ -25,7 +25,7 @@ Your job is to design, implement, and refine an internal system that:
 - Cross-state tax: IGST 18%
 - SAC code is service-dependent and may vary by invoice line, service category, or business offering
 - Default SAC can be `998314` only when the invoiced service actually falls under that classification
-- Invoice number format: CTS/<FY>/INV/<sequence>
+- Invoice number format: CTS/<FY>/INV<sequence>
 - Financial year runs from April to March
 - Due date rule: Net 10 days
 - Initial automation stack: n8n in Docker, Airtable as the current source of truth, Puppeteer for PDF generation
@@ -33,7 +33,7 @@ Your job is to design, implement, and refine an internal system that:
 - Deployment target may include a dedicated n8n container and environment-driven configuration
 
 ## Mandatory Invoice Fields
-- Invoice No: text, example `CTS/26-27/INV/001`
+- Invoice No: text, example `CTS/26-27/INV001`
 - Client Name: text, example `XYZ Pvt Ltd`
 - GSTIN: text, example `24ABCDE1234F1Z5`
 - State: text, example `Gujarat`

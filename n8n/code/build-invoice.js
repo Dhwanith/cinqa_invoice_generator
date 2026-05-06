@@ -17,7 +17,7 @@ function getInvoiceNumberCode(invoiceType) {
 }
 
 function buildInvoiceNumber(financialYear, sequence, invoiceType) {
-  return `CTS/${financialYear}/${getInvoiceNumberCode(invoiceType)}/${formatInvoiceSequence(sequence)}`;
+  return `CTS/${financialYear}/${getInvoiceNumberCode(invoiceType)}${formatInvoiceSequence(sequence)}`;
 }
 
 function addDays(value, days) {

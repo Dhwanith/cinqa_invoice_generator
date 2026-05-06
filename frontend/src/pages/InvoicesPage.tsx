@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDownUp, Search, X, FileDown, Eye, LoaderCircle, Trash2 } from "lucide-react";
+import { ArrowDownUp, CalendarIcon, Search, X, FileDown, Eye, LoaderCircle, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { deleteInvoice, fetchInvoiceDetail, fetchInvoices, formatCurrency, formatDate, updateInvoiceStatus } from "@/services/api";
@@ -31,6 +32,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { convertProformaToTaxInvoice } from "@/services/api";
 
 type InvoiceSortOption = "newest" | "oldest" | "amount-high" | "amount-low" | "invoice-asc" | "invoice-desc" | "client-asc" | "client-desc";
@@ -54,6 +57,7 @@ export default function InvoicesPage() {
   const [invoicePendingConversion, setInvoicePendingConversion] = useState<Invoice | null>(null);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
   const [purchaseOrderDate, setPurchaseOrderDate] = useState(new Date().toISOString().slice(0, 10));
+  const [poDateOpen, setPoDateOpen] = useState(false);
   const [conversionSac, setConversionSac] = useState("");
 
   const { data: invoices = [], isLoading } = useQuery({
@@ -267,12 +271,34 @@ export default function InvoicesPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground">Purchase Order Date</label>
-              <Input
-                type="date"
-                value={purchaseOrderDate}
-                onChange={(event) => setPurchaseOrderDate(event.target.value)}
-                disabled={convertMutation.isPending}
-              />
+              <Popover open={poDateOpen} onOpenChange={setPoDateOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={convertMutation.isPending}
+                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
+                    {purchaseOrderDate ? format(new Date(purchaseOrderDate + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={purchaseOrderDate ? new Date(purchaseOrderDate + "T00:00:00") : undefined}
+                    onSelect={(date) => {
+                      if (date) {
+                        const y = date.getFullYear();
+                        const m = String(date.getMonth() + 1).padStart(2, "0");
+                        const d = String(date.getDate()).padStart(2, "0");
+                        setPurchaseOrderDate(`${y}-${m}-${d}`);
+                        setPoDateOpen(false);
+                      }
+                    }}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -322,24 +348,24 @@ export default function InvoicesPage() {
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search invoice number or client..." className="pl-10" />
         </div>
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
-          <ArrowDownUp size={14} className="text-muted-foreground" />
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as InvoiceSortOption)}
-            className="bg-transparent text-sm focus:outline-none"
-            aria-label="Sort invoices"
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="amount-high">Amount: high to low</option>
-            <option value="amount-low">Amount: low to high</option>
-            <option value="invoice-asc">Invoice no: A to Z</option>
-            <option value="invoice-desc">Invoice no: Z to A</option>
-            <option value="client-asc">Client: A to Z</option>
-            <option value="client-desc">Client: Z to A</option>
-          </select>
-        </div>
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as InvoiceSortOption)}>
+          <SelectTrigger className="w-auto rounded-xl border border-border bg-card text-sm h-10 px-3 gap-2 shadow-none">
+            <span className="flex items-center gap-2">
+              <ArrowDownUp size={14} className="text-muted-foreground shrink-0" />
+              <SelectValue />
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="amount-high">Amount: high to low</SelectItem>
+            <SelectItem value="amount-low">Amount: low to high</SelectItem>
+            <SelectItem value="invoice-asc">Invoice no: A to Z</SelectItem>
+            <SelectItem value="invoice-desc">Invoice no: Z to A</SelectItem>
+            <SelectItem value="client-asc">Client: A to Z</SelectItem>
+            <SelectItem value="client-desc">Client: Z to A</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex gap-1.5 bg-muted rounded-xl p-1 overflow-x-auto">
           {(["all", "generated", "pending", "sent", "paid", "cancelled"] as const).map((option) => (
             <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>

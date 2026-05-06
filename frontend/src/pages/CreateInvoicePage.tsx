@@ -1,14 +1,22 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, FileDown, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, Check, CheckCircle2, ChevronsUpDown, FileDown, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import { createInvoice, type CreateInvoiceResult, fetchClients, formatCurrency } from "@/services/api";
 import type { Invoice, LineItem } from "@/types/invoice";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { getActualInvoicePdfDownloadUrl } from "@/services/invoicePdf";
 
 const COMPANY_STATE_CODE = 24;
@@ -33,7 +41,9 @@ export default function CreateInvoicePage() {
     queryFn: () => fetchClients({ active: "active" }),
   });
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [clientOpen, setClientOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
+  const [dateOpen, setDateOpen] = useState(false);
   const [invoiceType, setInvoiceType] = useState<"tax" | "proforma">("tax");
   const [showQuantity, setShowQuantity] = useState(false);
   const [includeDueDate, setIncludeDueDate] = useState(true);
@@ -228,27 +238,88 @@ export default function CreateInvoicePage() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Client</label>
-                <select value={selectedClientId} onChange={(e) => setSelectedClientId(e.target.value)} className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring" required>
-                  {!clients.length && <option value="">No active clients available</option>}
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>{client.name} · {client.state} ({client.stateCode})</option>
-                  ))}
-                </select>
+                <Popover open={clientOpen} onOpenChange={setClientOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={clientOpen}
+                      className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring flex items-center justify-between text-left"
+                    >
+                      <span className={cn("truncate", !selectedClient && "text-muted-foreground")}>
+                        {selectedClient ? selectedClient.name : isLoading ? "Loading…" : "Select client…"}
+                      </span>
+                      <ChevronsUpDown size={14} className="ml-2 shrink-0 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search clients…" />
+                      <CommandList>
+                        <CommandEmpty>No clients found.</CommandEmpty>
+                        <CommandGroup>
+                          {clients.map((client) => (
+                            <CommandItem
+                              key={client.id}
+                              value={client.name}
+                              onSelect={() => { setSelectedClientId(client.id); setClientOpen(false); }}
+                            >
+                              <Check size={13} className={cn("mr-2 shrink-0", selectedClientId === client.id ? "opacity-100" : "opacity-0")} />
+                              <span className="flex-1">{client.name}</span>
+                              <span className="ml-3 text-xs text-muted-foreground">{client.state} ({client.stateCode})</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Invoice Date</label>
-                <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} required />
+                <Popover open={dateOpen} onOpenChange={setDateOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-2 text-left"
+                    >
+                      <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
+                      {invoiceDate ? format(new Date(invoiceDate + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={invoiceDate ? new Date(invoiceDate + "T00:00:00") : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          setInvoiceDate(`${y}-${m}-${d}`);
+                          setDateOpen(false);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Invoice Type</label>
-                <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value as "tax" | "proforma")} className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                  <option value="tax">Tax Invoice</option>
-                  <option value="proforma">Proforma Invoice</option>
-                </select>
+                <Select value={invoiceType} onValueChange={(v) => setInvoiceType(v as "tax" | "proforma")}>
+                  <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tax">Tax Invoice</SelectItem>
+                    <SelectItem value="proforma">Proforma Invoice</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-end">
-                <label className="flex items-center gap-3 text-sm rounded-xl border border-border px-4 py-3 w-full bg-background">
-                  <input type="checkbox" checked={showQuantity} onChange={(e) => setShowQuantity(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                <label className="flex items-center gap-3 text-sm rounded-xl border border-border px-4 py-3 w-full bg-background cursor-pointer">
+                  <Checkbox checked={showQuantity} onCheckedChange={(checked) => setShowQuantity(Boolean(checked))} />
                   <span>Show Qty column</span>
                 </label>
               </div>
@@ -256,8 +327,8 @@ export default function CreateInvoicePage() {
 
             {invoiceType === "proforma" && (
               <div className="mt-4 rounded-2xl border border-border bg-background p-4">
-                <label className="flex items-center gap-3 text-sm">
-                  <input type="checkbox" checked={includeDueDate} onChange={(e) => setIncludeDueDate(e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                <label className="flex items-center gap-3 text-sm cursor-pointer">
+                  <Checkbox checked={includeDueDate} onCheckedChange={(checked) => setIncludeDueDate(Boolean(checked))} />
                   <span>Include Due Date on proforma invoice</span>
                 </label>
               </div>
@@ -286,10 +357,24 @@ export default function CreateInvoicePage() {
             </div>
             <div className="space-y-4">
               {lineItems.map((item, index) => (
-                <div key={index} className={`grid ${showQuantity ? "md:grid-cols-[1fr,120px,120px,160px,120px,44px]" : "md:grid-cols-[1fr,160px,180px,44px]"} gap-3 items-end rounded-2xl border border-border p-4`}>
+                <div key={index} className={`grid ${showQuantity ? "md:grid-cols-[1fr,120px,120px,160px,120px,44px]" : "md:grid-cols-[1fr,160px,180px,44px]"} gap-3 items-start rounded-2xl border border-border p-4`}>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-muted-foreground">Description</label>
-                    <Input value={item.description} onChange={(e) => updateLineItem(index, "description", e.target.value)} placeholder="Service description" required />
+                    <Textarea
+                      ref={(el) => {
+                        if (el) { el.style.height = "auto"; el.style.height = `${el.scrollHeight}px`; }
+                      }}
+                      value={item.description}
+                      onChange={(e) => {
+                        updateLineItem(index, "description", e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = `${e.target.scrollHeight}px`;
+                      }}
+                      placeholder="Service description"
+                      required
+                      rows={1}
+                      className="min-h-[44px] resize-none overflow-hidden py-2.5 leading-snug"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-muted-foreground">SAC</label>
@@ -317,7 +402,7 @@ export default function CreateInvoicePage() {
                       <Input type="number" min={0} step="any" value={item.amount} onChange={(e) => updateLineItem(index, "amount", e.target.value)} placeholder="0" required />
                     )}
                   </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1} className="rounded-xl text-muted-foreground hover:text-destructive">
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1} className="rounded-xl text-muted-foreground hover:text-destructive mt-[22px]">
                     <Trash2 size={16} />
                   </Button>
                 </div>

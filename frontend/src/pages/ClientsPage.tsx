@@ -9,6 +9,8 @@ import type { Client } from "@/types/invoice";
 import { createClient, fetchClients, type CreateClientPayload, updateClient } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const defaultFormState: CreateClientPayload = {
   name: "",
@@ -176,11 +178,11 @@ export default function ClientsPage() {
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground">Notes</label>
-                <textarea value={formState.notes} onChange={(e) => updateField("notes", e.target.value)} rows={2} className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-y" placeholder="Internal notes..." />
+                <Textarea value={formState.notes} onChange={(e) => updateField("notes", e.target.value)} rows={2} className="resize-y" placeholder="Internal notes..." />
               </div>
               <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={formState.active} onChange={(e) => updateField("active", e.target.checked)} className="w-4 h-4 rounded accent-primary" />
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={formState.active} onCheckedChange={(checked) => updateField("active", Boolean(checked))} />
                   <span>Active client</span>
                 </label>
               </div>

@@ -1,11 +1,15 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Users, FileText, FilePlus, AlertTriangle, CheckCircle2, ArrowRight, CalendarRange } from "lucide-react";
+import { Users, FileText, FilePlus, AlertTriangle, CheckCircle2, ArrowRight, CalendarRange, CalendarIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { fetchClients, fetchInvoices, formatCurrency, formatDate } from "@/services/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -89,6 +93,8 @@ export default function Dashboard() {
   const [selectedQuarter, setSelectedQuarter] = useState<string>("Q1");
   const [rangeStart, setRangeStart] = useState<string>("");
   const [rangeEnd, setRangeEnd] = useState<string>("");
+  const [dateFromOpen, setDateFromOpen] = useState(false);
+  const [dateToOpen, setDateToOpen] = useState(false);
 
   const effectiveFy = selectedFy || fyOptions[0] || "";
   const effectiveMonth = selectedMonth || monthOptions[0] || "";
@@ -155,47 +161,52 @@ export default function Dashboard() {
         <div className="grid md:grid-cols-[180px,1fr] gap-4 items-start">
           <div>
             <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">View</label>
-            <select
-              value={filterMode}
-              onChange={(event) => setFilterMode(event.target.value as DashboardFilterMode)}
-              className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="overall">Overall</option>
-              <option value="fy">Financial Year</option>
-              <option value="monthly">Monthly</option>
-              <option value="quarterly">Quarterly</option>
-              <option value="date-range">Date Range</option>
-            </select>
+            <Select value={filterMode} onValueChange={(v) => setFilterMode(v as DashboardFilterMode)}>
+              <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="overall">Overall</SelectItem>
+                <SelectItem value="fy">Financial Year</SelectItem>
+                <SelectItem value="monthly">Monthly</SelectItem>
+                <SelectItem value="quarterly">Quarterly</SelectItem>
+                <SelectItem value="date-range">Date Range</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filterMode === "fy" && (
               <div>
                 <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Financial Year</label>
-                <select
-                  value={effectiveFy}
-                  onChange={(event) => setSelectedFy(event.target.value)}
-                  className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {fyOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                <Select value={effectiveFy} onValueChange={setSelectedFy}>
+                  <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fyOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
             {filterMode === "monthly" && (
               <div>
                 <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Month</label>
-                <select
-                  value={effectiveMonth}
-                  onChange={(event) => setSelectedMonth(event.target.value)}
-                  className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {monthOptions.map((option) => (
-                    <option key={option} value={option}>{new Date(`${option}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}</option>
-                  ))}
-                </select>
+                <Select value={effectiveMonth} onValueChange={setSelectedMonth}>
+                  <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {new Date(`${option}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -203,28 +214,30 @@ export default function Dashboard() {
               <>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Financial Year</label>
-                  <select
-                    value={effectiveQuarterFy}
-                    onChange={(event) => setSelectedQuarterFy(event.target.value)}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {fyOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
+                  <Select value={effectiveQuarterFy} onValueChange={setSelectedQuarterFy}>
+                    <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Quarter</label>
-                  <select
-                    value={selectedQuarter}
-                    onChange={(event) => setSelectedQuarter(event.target.value)}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="Q1">Q1 (Apr-Jun)</option>
-                    <option value="Q2">Q2 (Jul-Sep)</option>
-                    <option value="Q3">Q3 (Oct-Dec)</option>
-                    <option value="Q4">Q4 (Jan-Mar)</option>
-                  </select>
+                  <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                    <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Q1">Q1 (Apr–Jun)</SelectItem>
+                      <SelectItem value="Q2">Q2 (Jul–Sep)</SelectItem>
+                      <SelectItem value="Q3">Q3 (Oct–Dec)</SelectItem>
+                      <SelectItem value="Q4">Q4 (Jan–Mar)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </>
             )}
@@ -233,21 +246,51 @@ export default function Dashboard() {
               <>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">From</label>
-                  <input
-                    type="date"
-                    value={effectiveRangeStart}
-                    onChange={(event) => setRangeStart(event.target.value)}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring">
+                        <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
+                        {effectiveRangeStart ? format(new Date(effectiveRangeStart + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={effectiveRangeStart ? new Date(effectiveRangeStart + "T00:00:00") : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            setRangeStart(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
+                            setDateFromOpen(false);
+                          }
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">To</label>
-                  <input
-                    type="date"
-                    value={effectiveRangeEnd}
-                    onChange={(event) => setRangeEnd(event.target.value)}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring">
+                        <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
+                        {effectiveRangeEnd ? format(new Date(effectiveRangeEnd + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={effectiveRangeEnd ? new Date(effectiveRangeEnd + "T00:00:00") : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            setRangeEnd(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
+                            setDateToOpen(false);
+                          }
+                        }}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </>
             )}

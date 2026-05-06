@@ -357,7 +357,8 @@ export default function CreateInvoicePage() {
             </div>
             <div className="space-y-4">
               {lineItems.map((item, index) => (
-                <div key={index} className={`grid ${showQuantity ? "md:grid-cols-[1fr,120px,120px,160px,120px,44px]" : "md:grid-cols-[1fr,160px,180px,44px]"} gap-3 items-start rounded-2xl border border-border p-4`}>
+                <div key={index} className="rounded-2xl border border-border p-4 space-y-3">
+                  {/* Row 1: Description */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-muted-foreground">Description</label>
                     <Textarea
@@ -376,35 +377,39 @@ export default function CreateInvoicePage() {
                       className="min-h-[44px] resize-none overflow-hidden py-2.5 leading-snug"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">SAC</label>
-                    <Input value={item.sac} onChange={(e) => updateLineItem(index, "sac", e.target.value)} placeholder={invoiceType === "proforma" ? "Optional" : "998314"} required={invoiceType === "tax"} />
-                  </div>
-                  {showQuantity && (
+
+                  {/* Row 2: SAC, numeric fields, delete */}
+                  <div className={`grid gap-3 items-end ${showQuantity ? "sm:grid-cols-[130px,90px,1fr,130px,44px]" : "sm:grid-cols-[130px,1fr,44px]"}`}>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground">Qty</label>
-                      <Input type="number" min={0} step="any" value={item.quantity ?? 1} onChange={(e) => updateLineItem(index, "quantity", e.target.value)} placeholder="1" required />
+                      <label className="text-xs font-semibold text-muted-foreground">SAC</label>
+                      <Input value={item.sac} onChange={(e) => updateLineItem(index, "sac", e.target.value)} placeholder={invoiceType === "proforma" ? "Optional" : "998314"} required={invoiceType === "tax"} />
                     </div>
-                  )}
-                  {showQuantity && (
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-muted-foreground">Unit Price</label>
-                      <Input type="number" min={0} step="any" value={item.unitPrice ?? item.amount} onChange={(e) => updateLineItem(index, "unitPrice", e.target.value)} placeholder="0" required />
-                    </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-muted-foreground">{showQuantity ? "Amount" : "Price"}</label>
-                    {showQuantity ? (
-                      <div className="h-11 px-4 rounded-xl border border-input bg-muted/40 text-sm flex items-center font-semibold">
-                        {formatCurrency(getLineItemAmount(item, showQuantity))}
+                    {showQuantity && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground">Qty</label>
+                        <Input type="number" min={0} step="any" value={item.quantity ?? 1} onChange={(e) => updateLineItem(index, "quantity", e.target.value)} placeholder="1" required />
                       </div>
-                    ) : (
-                      <Input type="number" min={0} step="any" value={item.amount} onChange={(e) => updateLineItem(index, "amount", e.target.value)} placeholder="0" required />
                     )}
+                    {showQuantity && (
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-muted-foreground">Unit Price</label>
+                        <Input type="number" min={0} step="any" value={item.unitPrice ?? item.amount} onChange={(e) => updateLineItem(index, "unitPrice", e.target.value)} placeholder="0" required />
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground">{showQuantity ? "Amount" : "Price"}</label>
+                      {showQuantity ? (
+                        <div className="h-11 px-4 rounded-xl border border-input bg-muted/40 text-sm flex items-center font-semibold">
+                          {formatCurrency(getLineItemAmount(item, showQuantity))}
+                        </div>
+                      ) : (
+                        <Input type="number" min={0} step="any" value={item.amount} onChange={(e) => updateLineItem(index, "amount", e.target.value)} placeholder="0" required />
+                      )}
+                    </div>
+                    <Button type="button" variant="ghost" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1} className="rounded-xl text-muted-foreground hover:text-destructive mt-[22px]">
+                      <Trash2 size={16} />
+                    </Button>
                   </div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1} className="rounded-xl text-muted-foreground hover:text-destructive mt-[22px]">
-                    <Trash2 size={16} />
-                  </Button>
                 </div>
               ))}
             </div>

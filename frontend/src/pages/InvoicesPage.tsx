@@ -30,9 +30,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { convertProformaToTaxInvoice } from "@/services/api";
 
 type InvoiceSortOption = "newest" | "oldest" | "amount-high" | "amount-low" | "invoice-asc" | "invoice-desc" | "client-asc" | "client-desc";
+
+const STATUS_TRIGGER_CLASSES: Record<string, string> = {
+  pending: "border-amber-500 text-amber-600 bg-amber-500/5",
+  sent: "border-primary text-primary bg-primary/5",
+  paid: "border-success text-success bg-success/5",
+  cancelled: "border-destructive text-destructive bg-destructive/5",
+};
 
 export default function InvoicesPage() {
   const queryClient = useQueryClient();
@@ -333,7 +341,7 @@ export default function InvoicesPage() {
           </select>
         </div>
         <div className="flex gap-1.5 bg-muted rounded-xl p-1 overflow-x-auto">
-          {(["all", "generated", "pending", "sent", "paid"] as const).map((option) => (
+          {(["all", "generated", "pending", "sent", "paid", "cancelled"] as const).map((option) => (
             <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               {option}
             </button>
@@ -424,9 +432,22 @@ export default function InvoicesPage() {
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "pending" ? "border-amber-500 text-amber-600 bg-amber-500/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "pending" })}>Mark Pending</Button>
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "sent" ? "border-primary text-primary bg-primary/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "sent" })}>Mark Sent</Button>
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${selectedInvoice.status === "paid" ? "border-success text-success bg-success/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: "paid" })}>Mark Paid</Button>
+                <Select
+                  value={selectedInvoice.status}
+                  onValueChange={(value) => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: value })}
+                  disabled={statusMutation.isPending}
+                >
+                  <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[selectedInvoice.status] ?? ""}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="generated">Generated</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button variant="outline" size="sm" className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(selectedInvoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>
@@ -470,9 +491,22 @@ export default function InvoicesPage() {
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "pending" ? "border-amber-500 text-amber-600 bg-amber-500/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "pending" })}>Mark Pending</Button>
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "sent" ? "border-primary text-primary bg-primary/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "sent" })}>Mark Sent</Button>
-                <Button variant="outline" size="sm" className={`text-xs h-8 ${invoice.status === "paid" ? "border-success text-success bg-success/5" : ""}`} onClick={() => statusMutation.mutate({ invoiceId: invoice.id, status: "paid" })}>Mark Paid</Button>
+                <Select
+                  value={invoice.status}
+                  onValueChange={(value) => statusMutation.mutate({ invoiceId: invoice.id, status: value })}
+                  disabled={statusMutation.isPending}
+                >
+                  <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[invoice.status] ?? ""}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="generated">Generated</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(invoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>

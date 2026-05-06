@@ -5,6 +5,7 @@ const statusStyles: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-600",
   sent: "bg-primary/10 text-primary",
   paid: "bg-success/15 text-success",
+  cancelled: "bg-destructive/10 text-destructive",
   active: "bg-success/15 text-success",
   inactive: "bg-muted text-muted-foreground",
 };

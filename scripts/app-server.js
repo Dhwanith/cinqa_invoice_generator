@@ -331,13 +331,14 @@ async function airtableRequest(url, init = {}) {
   return response.status === 204 ? null : response.json();
 }
 
-function normalizeClientFields(fields, recordId) {
+export function normalizeClientFields(fields, recordId) {
   const addressLines = [fields['Address Line 1'], fields['Address Line 2'], fields['Address Line 3']].filter(Boolean);
   const activeValue = fields.Active;
   const isActive =
-    activeValue === undefined ||
-    activeValue === null ||
     activeValue === true ||
+    activeValue === 1 ||
+    String(activeValue).toLowerCase() === 'true' ||
+    String(activeValue).toLowerCase() === 'yes' ||
     String(activeValue).toLowerCase() === 'active';
 
   return {
@@ -588,7 +589,7 @@ async function listClients(search = '') {
   return (response.records || []).map((record) => normalizeClientFields(record.fields || {}, record.id));
 }
 
-function buildClientFilterFormula({ search, active }) {
+export function buildClientFilterFormula({ search, active }) {
   const clauses = [];
 
   if (search) {
@@ -597,11 +598,11 @@ function buildClientFilterFormula({ search, active }) {
   }
 
   if (active === 'active') {
-    clauses.push('OR({Active} = BLANK(), {Active} = 1, LOWER({Active} & "") = "active", {Active} = TRUE())');
+    clauses.push('OR({Active} = 1, LOWER({Active} & "") = "active", LOWER({Active} & "") = "yes", {Active} = TRUE())');
   }
 
   if (active === 'inactive') {
-    clauses.push('AND({Active} != BLANK(), NOT(OR({Active} = 1, LOWER({Active} & "") = "active", {Active} = TRUE())))');
+    clauses.push('NOT(OR({Active} = 1, LOWER({Active} & "") = "active", LOWER({Active} & "") = "yes", {Active} = TRUE()))');
   }
 
   if (clauses.length === 0) {

@@ -14,6 +14,8 @@ import VendorsPage from "@/pages/VendorsPage";
 import PurchasesPage from "@/pages/PurchasesPage";
 import CreatePurchasePage from "@/pages/CreatePurchasePage";
 import ReimbursementsPage from "@/pages/ReimbursementsPage";
+import EmployeesPage from "@/pages/payroll/EmployeesPage";
+import PayrollRegisterPage from "@/pages/payroll/PayrollRegisterPage";
 import ProfitLossPage from "@/pages/accounting/ProfitLossPage";
 import BalanceSheetPage from "@/pages/accounting/BalanceSheetPage";
 import TrialBalancePage from "@/pages/accounting/TrialBalancePage";
@@ -156,6 +158,8 @@ function AuthenticatedApp() {
         <Route path="/purchases" element={<PurchasesPage />} />
         <Route path="/purchases/new" element={<CreatePurchasePage />} />
         <Route path="/reimbursements" element={<ReimbursementsPage />} />
+        <Route path="/payroll/employees" element={<EmployeesPage />} />
+        <Route path="/payroll/register"   element={<PayrollRegisterPage />} />
         <Route path="/accounting/profit-loss"  element={<ProfitLossPage />} />
         <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
         <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />

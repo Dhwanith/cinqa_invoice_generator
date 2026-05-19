@@ -12,6 +12,7 @@ import { listVendors, getVendorById, createVendorRecord, updateVendorRecord } fr
 import { listReimbursements, createReimbursement, updateReimbursementStatus, deleteReimbursement, bulkApproveReimbursements } from '../src/repositories/supabase/reimbursement-repository.js';
 import { createGstr2bImport, listGstr2bImports, getGstr2bRecords, getBooksOnlyForImport, manualMatchRecord, computeGstr3bData, saveGstr3bReturn, markGstr3bFiled, listGstr3bReturns, getGstSummary } from '../src/repositories/supabase/gst-repository.js';
 import { listAccounts, listJournalEntries, createJournalEntry, deleteJournalEntry, getLatestBankBalance, saveBankBalance, getLatestCapitalEntry, saveCapitalEntry, computeProfitLoss, computeBalanceSheet, computeTrialBalance } from '../src/repositories/supabase/accounting-repository.js';
+import { listEmployees, createEmployee, updateEmployee, getSalaryStructure, upsertSalaryStructure, listPayrollRuns, getPayrollRun, getPayrollRunForPeriod, createPayrollRun, updatePayrollEntry, updatePayrollRunStatus, deletePayrollRun } from '../src/repositories/supabase/payroll-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
@@ -1019,6 +1020,81 @@ export function createApp() {
     const dateFrom = validateTrimmedString(req.query.dateFrom, 'dateFrom');
     const dateTo   = validateTrimmedString(req.query.dateTo,   'dateTo');
     res.json({ ok: true, report: await computeTrialBalance({ dateFrom, dateTo }) });
+  }));
+
+  // ── Payroll — Employees ────────────────────────────────────────────────────
+
+  app.get('/api/payroll/employees', handleRoute(async (req, res) => {
+    res.json({ ok: true, employees: await listEmployees({ search: validateOptionalString(req.query.search), active: validateOptionalString(req.query.active) || 'all' }) });
+  }));
+
+  app.post('/api/payroll/employees', handleRoute(async (req, res) => {
+    const emp = await createEmployee(req.body || {});
+    res.status(201).json({ ok: true, employee: emp });
+  }));
+
+  app.put('/api/payroll/employees/:id', handleRoute(async (req, res) => {
+    const emp = await updateEmployee(req.params.id, req.body || {});
+    res.json({ ok: true, employee: emp });
+  }));
+
+  app.get('/api/payroll/employees/:id/salary', handleRoute(async (req, res) => {
+    res.json({ ok: true, structure: await getSalaryStructure(req.params.id) });
+  }));
+
+  app.put('/api/payroll/employees/:id/salary', handleRoute(async (req, res) => {
+    const struct = await upsertSalaryStructure(req.params.id, req.body || {});
+    res.json({ ok: true, structure: struct });
+  }));
+
+  // ── Payroll — Runs ─────────────────────────────────────────────────────────
+
+  app.get('/api/payroll/runs', handleRoute(async (_req, res) => {
+    res.json({ ok: true, runs: await listPayrollRuns() });
+  }));
+
+  app.get('/api/payroll/runs/period', handleRoute(async (req, res) => {
+    const month = Number(req.query.month);
+    const year = Number(req.query.year);
+    if (!month || !year) throw new HttpError(400, 'month and year are required.');
+    res.json({ ok: true, run: await getPayrollRunForPeriod(month, year) });
+  }));
+
+  app.get('/api/payroll/runs/:runId', handleRoute(async (req, res) => {
+    res.json({ ok: true, run: await getPayrollRun(req.params.runId) });
+  }));
+
+  app.post('/api/payroll/runs', handleRoute(async (req, res) => {
+    const body = req.body || {};
+    const run = await createPayrollRun({
+      month: Number(body.month), year: Number(body.year),
+      periodLabel: validateTrimmedString(body.periodLabel, 'periodLabel'),
+      financialYear: validateOptionalString(body.financialYear),
+      workingDays: Number(body.workingDays || 26),
+    });
+    res.status(201).json({ ok: true, run });
+  }));
+
+  app.patch('/api/payroll/runs/:runId/status', handleRoute(async (req, res) => {
+    const status = validateTrimmedString(req.body.status, 'status').toLowerCase();
+    if (!['approved', 'paid', 'draft'].includes(status)) throw new HttpError(400, 'Invalid status.');
+    const run = await updatePayrollRunStatus(req.params.runId, status);
+    res.json({ ok: true, run });
+  }));
+
+  app.delete('/api/payroll/runs/:runId', handleRoute(async (req, res) => {
+    await deletePayrollRun(req.params.runId);
+    res.json({ ok: true });
+  }));
+
+  app.patch('/api/payroll/entries/:entryId', handleRoute(async (req, res) => {
+    const body = req.body || {};
+    await updatePayrollEntry(req.params.entryId, {
+      presentDays: body.presentDays !== undefined ? Number(body.presentDays) : undefined,
+      bonus: body.bonus !== undefined ? Number(body.bonus) : undefined,
+      otherDeductions: body.otherDeductions !== undefined ? Number(body.otherDeductions) : undefined,
+    });
+    res.json({ ok: true });
   }));
 
   // ── SPA fallback ───────────────────────────────────────────────────────────

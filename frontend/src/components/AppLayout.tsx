@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, FileText, FilePlus, LogOut, Menu, X,
   Receipt, Building2, ShoppingBag, Wallet, FileSpreadsheet, Calculator, BarChart3,
-  TrendingUp, Scale, BookOpen, ListOrdered,
+  TrendingUp, Scale, BookOpen, ListOrdered, UserCog, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -32,6 +32,13 @@ const navGroups = [
     label: "Expenses",
     items: [
       { to: "/reimbursements", icon: Wallet, label: "Reimbursements" },
+    ],
+  },
+  {
+    label: "Payroll",
+    items: [
+      { to: "/payroll/register",  icon: ClipboardList, label: "Payroll Register" },
+      { to: "/payroll/employees", icon: UserCog,       label: "Employees" },
     ],
   },
   {

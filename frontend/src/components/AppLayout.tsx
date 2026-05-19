@@ -1,14 +1,51 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, FileText, FilePlus, LogOut, Menu, X } from "lucide-react";
+import {
+  LayoutDashboard, Users, FileText, FilePlus, LogOut, Menu, X,
+  Receipt, Building2, ShoppingBag,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/clients", icon: Users, label: "Clients" },
-  { to: "/invoices", icon: FileText, label: "Invoices" },
-  { to: "/invoices/new", icon: FilePlus, label: "New Invoice" },
+const navGroups = [
+  {
+    label: null,
+    items: [{ to: "/", icon: LayoutDashboard, label: "Dashboard" }],
+  },
+  {
+    label: "Sales",
+    items: [
+      { to: "/invoices",     icon: FileText,       label: "Invoices" },
+      { to: "/invoices/new", icon: FilePlus,        label: "New Invoice" },
+      { to: "/clients",      icon: Users,           label: "Clients" },
+    ],
+  },
+  {
+    label: "Purchases",
+    items: [
+      { to: "/purchases",     icon: Receipt,    label: "Purchase Register" },
+      { to: "/purchases/new", icon: ShoppingBag, label: "New Purchase" },
+      { to: "/vendors",       icon: Building2,  label: "Vendors" },
+    ],
+  },
 ];
+
+function NavItem({ to, icon: Icon, label }: { to: string; icon: React.ElementType; label: string }) {
+  const location = useLocation();
+  const active = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to) && (to !== "/invoices" || !location.pathname.startsWith("/invoices/new")) && (to !== "/purchases" || !location.pathname.startsWith("/purchases/new"));
+  return (
+    <Link
+      to={to}
+      className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+        active
+          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-soft"
+          : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+      }`}
+    >
+      <Icon size={16} />
+      {label}
+    </Link>
+  );
+}
 
 export default function AppLayout({
   children,
@@ -21,43 +58,49 @@ export default function AppLayout({
   onLogout: () => void;
   isLoggingOut?: boolean;
 }) {
-  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navContent = (onItemClick?: () => void) => (
+    <>
+      {navGroups.map((group, gi) => (
+        <div key={gi} className={gi > 0 ? "mt-4" : ""}>
+          {group.label && (
+            <p className="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
+              {group.label}
+            </p>
+          )}
+          <div className="flex flex-col gap-0.5">
+            {group.items.map((item) => (
+              <div key={item.to} onClick={onItemClick}>
+                <NavItem to={item.to} icon={item.icon} label={item.label} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
 
   return (
     <div className="flex min-h-screen bg-background">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex flex-col w-[260px] border-r border-border bg-sidebar p-6 sticky top-0 h-screen">
-        <div className="flex items-center gap-3 mb-10">
+      <aside className="hidden lg:flex flex-col w-[260px] border-r border-border bg-sidebar p-5 sticky top-0 h-screen overflow-y-auto">
+        <div className="flex items-center gap-3 mb-8">
           <img src="/cinqa-logo.jpeg" alt="Cinqa" className="w-11 h-11 rounded-xl object-cover border border-border" />
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Operations</p>
             <h1 className="font-brand text-2xl font-bold leading-none tracking-tight text-foreground">CINQA</h1>
           </div>
         </div>
-        <nav className="flex flex-col gap-1 flex-1">
-          {navItems.map((item) => {
-            const active = location.pathname === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-soft"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                }`}
-              >
-                <item.icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
+
+        <nav className="flex flex-col flex-1 gap-0">
+          {navContent()}
         </nav>
-        <footer className="pt-6 border-t border-border mt-auto">
-          <div className="mb-4">
+
+        <footer className="pt-5 border-t border-border mt-4">
+          <div className="mb-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Signed In</p>
-            <p className="text-sm font-semibold text-foreground mt-1">{username}</p>
+            <p className="text-sm font-semibold text-foreground mt-0.5 truncate">{username}</p>
           </div>
           <Button variant="outline" className="w-full justify-start rounded-xl mb-4" onClick={onLogout} disabled={isLoggingOut}>
             <LogOut size={16} /> {isLoggingOut ? "Signing out..." : "Sign out"}
@@ -83,34 +126,16 @@ export default function AppLayout({
       {/* Mobile Menu */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setMobileOpen(false)}>
-          <nav className="absolute top-16 left-4 right-4 bg-card rounded-2xl shadow-elevated p-4 flex flex-col gap-1 border border-border" onClick={(e) => e.stopPropagation()}>
-            {navItems.map((item) => {
-              const active = location.pathname === item.to;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                    active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted"
-                  }`}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                </Link>
-              );
-            })}
-            <Button
-              variant="outline"
-              className="mt-3 justify-start rounded-xl"
-              onClick={() => {
-                setMobileOpen(false);
-                onLogout();
-              }}
-              disabled={isLoggingOut}
-            >
-              <LogOut size={16} /> {isLoggingOut ? "Signing out..." : "Sign out"}
-            </Button>
+          <nav
+            className="absolute top-16 left-4 right-4 bg-card rounded-2xl shadow-elevated p-4 border border-border max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {navContent(() => setMobileOpen(false))}
+            <div className="mt-4 pt-4 border-t border-border">
+              <Button variant="outline" className="w-full justify-start rounded-xl" onClick={() => { setMobileOpen(false); onLogout(); }} disabled={isLoggingOut}>
+                <LogOut size={16} /> {isLoggingOut ? "Signing out..." : "Sign out"}
+              </Button>
+            </div>
           </nav>
         </div>
       )}

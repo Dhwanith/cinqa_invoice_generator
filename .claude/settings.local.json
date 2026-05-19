@@ -11,7 +11,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('app-server ok'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
+      "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('app-server ok'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('ok'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
     ]
   }
 }

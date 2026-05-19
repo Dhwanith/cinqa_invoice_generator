@@ -8,6 +8,8 @@ import express from 'express';
 
 import { queryClients, getClientById, createClientRecord, updateClientRecord } from '../src/repositories/supabase/client-repository.js';
 import { listInvoices, getInvoiceDetail, deleteInvoice, updateInvoiceStatus } from '../src/repositories/supabase/invoice-repository.js';
+import { listVendors, getVendorById, createVendorRecord, updateVendorRecord } from '../src/repositories/supabase/vendor-repository.js';
+import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
 import { getSignedPdfUrl, deleteStoredPdf } from '../src/services/pdf-storage.js';
@@ -644,6 +646,146 @@ export function createApp() {
       response.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`);
       response.setHeader('Content-Length', pdfBuffer.length);
       response.send(pdfBuffer);
+    })
+  );
+
+  // ── Vendors ───────────────────────────────────────────────────────────────
+
+  app.get(
+    '/api/vendors',
+    handleRoute(async (request, response) => {
+      const search = validateOptionalString(request.query.search);
+      const active = validateOptionalString(request.query.active) || 'all';
+      const category = validateOptionalString(request.query.category);
+      response.json({ ok: true, vendors: await listVendors({ search, active, category }) });
+    })
+  );
+
+  app.post(
+    '/api/vendors',
+    handleRoute(async (request, response) => {
+      const body = request.body || {};
+      const name = validateTrimmedString(body.name, 'Vendor Name');
+      const gstin = validateOptionalString(body.gstin).toUpperCase() || null;
+      if (gstin && !/^[0-9]{2}[A-Z0-9]{13}$/.test(gstin)) {
+        throw new HttpError(400, 'GSTIN must be a valid 15-character GSTIN.');
+      }
+      const vendor = await createVendorRecord({
+        name,
+        gstin,
+        state: validateOptionalString(body.state),
+        stateCode: Number(body.stateCode || 0),
+        addressLine1: validateOptionalString(body.addressLine1),
+        addressLine2: validateOptionalString(body.addressLine2),
+        addressLine3: validateOptionalString(body.addressLine3),
+        category: validateOptionalString(body.category) || 'other',
+        defaultPaymentTermsDays: Number(body.defaultPaymentTermsDays || 30),
+        email: validateOptionalString(body.email),
+        phone: validateOptionalString(body.phone),
+        notes: validateOptionalString(body.notes),
+        active: body.active === undefined ? true : Boolean(body.active)
+      });
+      response.status(201).json({ ok: true, vendor });
+    })
+  );
+
+  app.put(
+    '/api/vendors/:vendorId',
+    handleRoute(async (request, response) => {
+      const body = request.body || {};
+      const name = validateTrimmedString(body.name, 'Vendor Name');
+      const gstin = validateOptionalString(body.gstin).toUpperCase() || null;
+      if (gstin && !/^[0-9]{2}[A-Z0-9]{13}$/.test(gstin)) {
+        throw new HttpError(400, 'GSTIN must be a valid 15-character GSTIN.');
+      }
+      const vendor = await updateVendorRecord(request.params.vendorId, {
+        name,
+        gstin,
+        state: validateOptionalString(body.state),
+        stateCode: Number(body.stateCode || 0),
+        addressLine1: validateOptionalString(body.addressLine1),
+        addressLine2: validateOptionalString(body.addressLine2),
+        addressLine3: validateOptionalString(body.addressLine3),
+        category: validateOptionalString(body.category) || 'other',
+        defaultPaymentTermsDays: Number(body.defaultPaymentTermsDays || 30),
+        email: validateOptionalString(body.email),
+        phone: validateOptionalString(body.phone),
+        notes: validateOptionalString(body.notes),
+        active: body.active === undefined ? true : Boolean(body.active)
+      });
+      response.json({ ok: true, vendor });
+    })
+  );
+
+  // ── Purchases ─────────────────────────────────────────────────────────────
+
+  app.get(
+    '/api/purchases',
+    handleRoute(async (request, response) => {
+      const search = validateOptionalString(request.query.search);
+      const status = validateOptionalString(request.query.status) || 'all';
+      const dateFrom = validateOptionalString(request.query.dateFrom);
+      const dateTo = validateOptionalString(request.query.dateTo);
+      response.json({ ok: true, purchases: await listPurchases({ search, status, dateFrom, dateTo }) });
+    })
+  );
+
+  app.get(
+    '/api/purchases/:purchaseId',
+    handleRoute(async (request, response) => {
+      response.json({ ok: true, purchase: await getPurchaseDetail(request.params.purchaseId) });
+    })
+  );
+
+  app.post(
+    '/api/purchases',
+    handleRoute(async (request, response) => {
+      const body = request.body || {};
+      const vendorId = validateTrimmedString(body.vendorId, 'Vendor');
+      const purchaseDate = validateDateString(body.purchaseDate, 'Purchase Date');
+      if (!Array.isArray(body.lineItems) || body.lineItems.length === 0) {
+        throw new HttpError(400, 'At least one line item is required.');
+      }
+      const purchase = await createPurchase({
+        vendorId,
+        purchaseDate,
+        dueDate: validateOptionalString(body.dueDate) || null,
+        purchaseNumber: validateOptionalString(body.purchaseNumber),
+        category: validateOptionalString(body.category) || 'other',
+        itcType: validateOptionalString(body.itcType) || 'full',
+        isRcm: Boolean(body.isRcm),
+        notes: validateOptionalString(body.notes),
+        lineItems: body.lineItems
+      });
+      response.status(201).json({ ok: true, purchase });
+    })
+  );
+
+  app.patch(
+    '/api/purchases/:purchaseId/status',
+    handleRoute(async (request, response) => {
+      const status = validateTrimmedString(request.body.status, 'Status').toLowerCase();
+      const allowed = new Set(['draft', 'booked', 'paid', 'cancelled']);
+      if (!allowed.has(status)) throw new HttpError(400, 'Status must be one of: draft, booked, paid, cancelled.');
+
+      if (status === 'paid') {
+        const purchase = await markPurchasePaid(request.params.purchaseId, {
+          paymentDate: validateOptionalString(request.body.paymentDate) || new Date().toISOString().slice(0, 10),
+          paymentReference: validateOptionalString(request.body.paymentReference)
+        });
+        return response.json({ ok: true, purchase });
+      }
+
+      const purchase = await updatePurchaseStatus(request.params.purchaseId, status);
+      response.json({ ok: true, purchase });
+    })
+  );
+
+  app.delete(
+    '/api/purchases/:purchaseId',
+    handleRoute(async (request, response) => {
+      const deleted = await deletePurchase(request.params.purchaseId);
+      response.json({ ok: true, deleted });
     })
   );
 

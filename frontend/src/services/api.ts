@@ -48,7 +48,7 @@ export interface ConvertProformaToTaxInvoicePayload {
   invoiceDate?: string;
 }
 
-async function getAuthHeader(): Promise<string | null> {
+export async function getAuthHeader(): Promise<string | null> {
   try {
     const supabase = await getSupabase();
     const { data: { session } } = await supabase.auth.getSession();

@@ -13,6 +13,7 @@ import CreateInvoicePage from "@/pages/CreateInvoicePage";
 import VendorsPage from "@/pages/VendorsPage";
 import PurchasesPage from "@/pages/PurchasesPage";
 import CreatePurchasePage from "@/pages/CreatePurchasePage";
+import ReimbursementsPage from "@/pages/ReimbursementsPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/NotFound";
 import { getSupabase } from "@/lib/supabase";
@@ -147,6 +148,7 @@ function AuthenticatedApp() {
         <Route path="/vendors" element={<VendorsPage />} />
         <Route path="/purchases" element={<PurchasesPage />} />
         <Route path="/purchases/new" element={<CreatePurchasePage />} />
+        <Route path="/reimbursements" element={<ReimbursementsPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>

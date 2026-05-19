@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, FileText, FilePlus, LogOut, Menu, X,
-  Receipt, Building2, ShoppingBag,
+  Receipt, Building2, ShoppingBag, Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -25,6 +25,12 @@ const navGroups = [
       { to: "/purchases",     icon: Receipt,    label: "Purchase Register" },
       { to: "/purchases/new", icon: ShoppingBag, label: "New Purchase" },
       { to: "/vendors",       icon: Building2,  label: "Vendors" },
+    ],
+  },
+  {
+    label: "Expenses",
+    items: [
+      { to: "/reimbursements", icon: Wallet, label: "Reimbursements" },
     ],
   },
 ];

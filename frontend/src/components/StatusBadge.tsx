@@ -11,6 +11,10 @@ const statusStyles: Record<string, string> = {
   // Purchase statuses
   draft:           "bg-muted text-muted-foreground",
   booked:          "bg-blue-500/15 text-blue-600",
+  // Reimbursement statuses
+  approved:        "bg-blue-500/15 text-blue-600",
+  reimbursed:      "bg-success/15 text-success",
+  rejected:        "bg-destructive/10 text-destructive",
   // Client/vendor
   active:          "bg-success/15 text-success",
   inactive:        "bg-muted text-muted-foreground",

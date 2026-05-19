@@ -9,6 +9,7 @@ import express from 'express';
 import { queryClients, getClientById, createClientRecord, updateClientRecord } from '../src/repositories/supabase/client-repository.js';
 import { listInvoices, getInvoiceDetail, deleteInvoice, updateInvoiceStatus } from '../src/repositories/supabase/invoice-repository.js';
 import { listVendors, getVendorById, createVendorRecord, updateVendorRecord } from '../src/repositories/supabase/vendor-repository.js';
+import { listReimbursements, createReimbursement, updateReimbursementStatus, deleteReimbursement, bulkApproveReimbursements } from '../src/repositories/supabase/reimbursement-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
@@ -785,6 +786,75 @@ export function createApp() {
     '/api/purchases/:purchaseId',
     handleRoute(async (request, response) => {
       const deleted = await deletePurchase(request.params.purchaseId);
+      response.json({ ok: true, deleted });
+    })
+  );
+
+  // ── Reimbursements ────────────────────────────────────────────────────────
+
+  app.get(
+    '/api/reimbursements',
+    handleRoute(async (request, response) => {
+      response.json({ ok: true, reimbursements: await listReimbursements({
+        search:   validateOptionalString(request.query.search),
+        status:   validateOptionalString(request.query.status) || 'all',
+        paidBy:   validateOptionalString(request.query.paidBy),
+        dateFrom: validateOptionalString(request.query.dateFrom),
+        dateTo:   validateOptionalString(request.query.dateTo)
+      })});
+    })
+  );
+
+  app.post(
+    '/api/reimbursements',
+    handleRoute(async (request, response) => {
+      const body = request.body || {};
+      const reimbursement = await createReimbursement({
+        paidBy:           validateTrimmedString(body.paidBy, 'Paid By'),
+        date:             validateDateString(body.date, 'Date'),
+        description:      validateTrimmedString(body.description, 'Description'),
+        category:         validateOptionalString(body.category) || 'other',
+        amount:           Number(body.amount || 0),
+        gstAmount:        Number(body.gstAmount || 0),
+        itcEligible:      Boolean(body.itcEligible),
+        receiptReference: validateOptionalString(body.receiptReference),
+        notes:            validateOptionalString(body.notes)
+      });
+      response.status(201).json({ ok: true, reimbursement });
+    })
+  );
+
+  app.patch(
+    '/api/reimbursements/:id/status',
+    handleRoute(async (request, response) => {
+      const body = request.body || {};
+      const status = validateTrimmedString(body.status, 'Status').toLowerCase();
+      const allowed = new Set(['approved', 'reimbursed', 'rejected', 'pending']);
+      if (!allowed.has(status)) throw new HttpError(400, 'Invalid status.');
+      const reimbursement = await updateReimbursementStatus(request.params.id, {
+        status,
+        reimbursedDate:   validateOptionalString(body.reimbursedDate),
+        reimbursedAmount: body.reimbursedAmount !== undefined ? Number(body.reimbursedAmount) : undefined,
+        paymentReference: validateOptionalString(body.paymentReference)
+      });
+      response.json({ ok: true, reimbursement });
+    })
+  );
+
+  app.post(
+    '/api/reimbursements/bulk-approve',
+    handleRoute(async (request, response) => {
+      const ids = request.body?.ids;
+      if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'ids must be a non-empty array.');
+      const approved = await bulkApproveReimbursements(ids);
+      response.json({ ok: true, approved, count: approved.length });
+    })
+  );
+
+  app.delete(
+    '/api/reimbursements/:id',
+    handleRoute(async (request, response) => {
+      const deleted = await deleteReimbursement(request.params.id);
       response.json({ ok: true, deleted });
     })
   );

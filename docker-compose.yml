@@ -1,19 +1,4 @@
 services:
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: n8n-main
-    ports:
-      - "5678:5678"
-    env_file:
-      - .env
-    environment:
-      - NODE_FUNCTION_ALLOW_EXTERNAL=*
-      - PDF_SERVICE_URL=http://pdf-service:3001
-    volumes:
-      - n8n_data:/home/node/.n8n
-    depends_on:
-      - pdf-service
-    restart: unless-stopped
 
   operator-app:
     build:
@@ -23,15 +8,22 @@ services:
     env_file:
       - .env
     environment:
-      - APP_PORT=3010
-      - CREATE_INVOICE_WEBHOOK_URL=http://n8n:5678/webhook/create-invoice
+      APP_PORT: "3010"
     ports:
       - "3010:3010"
     command: ["npm", "run", "app:server"]
-    depends_on:
-      - n8n
-      - pdf-service
     restart: unless-stopped
+
+  pdf-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.pdf-service
+    container_name: cinqa-pdf-worker
+    env_file:
+      - .env
+    command: ["npm", "run", "pdf:worker"]
+    restart: unless-stopped
+    # No ports — internal background worker only.
 
   pdf-service:
     build:
@@ -41,10 +33,10 @@ services:
     env_file:
       - .env
     environment:
-      - PDF_SERVICE_PORT=3001
-    expose:
-      - "3001"
+      PDF_SERVICE_PORT: "3001"
+    ports:
+      - "3001:3001"
+    command: ["npm", "run", "pdf:service"]
     restart: unless-stopped
-
-volumes:
-  n8n_data:
+    # Kept for local testing via curl or Postman.
+    # Nothing in the app stack calls it directly.

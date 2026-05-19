@@ -1,5 +1,4 @@
 export { companyProfile } from './config/company.js';
-export { buildSequenceUpdate, mapInvoiceToAirtableFields, mapLineItemsToAirtableFields } from './services/airtable-mapper.js';
 export { amountToWords } from './services/amount-in-words.js';
 export { addDays, formatDisplayDate, getFinancialYearLabel } from './services/financial-year.js';
 export { calculateTaxBreakdown, formatCurrency, summarizeInvoiceTaxes } from './services/gst.js';

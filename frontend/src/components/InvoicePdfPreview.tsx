@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getActualInvoicePdfPreviewUrl, getInvoicePdfBlobUrl, downloadInvoicePdf } from "@/services/invoicePdf";
+import { getActualInvoicePdfPreviewUrl, downloadInvoicePdf } from "@/services/invoicePdf";
 import type { Invoice } from "@/types/invoice";
 
 interface Props {
@@ -11,26 +10,9 @@ interface Props {
 }
 
 export default function InvoicePdfPreview({ invoice, onClose }: Props) {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!invoice) {
-      setPdfUrl(null);
-      return;
-    }
-
-    const actualPdfUrl = getActualInvoicePdfPreviewUrl(invoice);
-    if (actualPdfUrl) {
-      setPdfUrl(actualPdfUrl);
-      return;
-    }
-
-    const url = getInvoicePdfBlobUrl(invoice);
-    setPdfUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [invoice]);
-
   if (!invoice) return null;
+
+  const pdfUrl = getActualInvoicePdfPreviewUrl(invoice);
 
   return (
     <AnimatePresence>
@@ -49,7 +31,6 @@ export default function InvoicePdfPreview({ invoice, onClose }: Props) {
           className="bg-card rounded-2xl border border-border shadow-elevated w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -78,19 +59,12 @@ export default function InvoicePdfPreview({ invoice, onClose }: Props) {
             </div>
           </div>
 
-          {/* PDF Embed */}
           <div className="flex-1 bg-muted/30 p-4 overflow-hidden">
-            {pdfUrl ? (
-              <iframe
-                src={pdfUrl}
-                className="w-full h-full rounded-xl border border-border bg-white"
-                title="Invoice PDF Preview"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                Generating PDF…
-              </div>
-            )}
+            <iframe
+              src={pdfUrl}
+              className="w-full h-full rounded-xl border border-border bg-white"
+              title="Invoice PDF Preview"
+            />
           </div>
         </motion.div>
       </motion.div>

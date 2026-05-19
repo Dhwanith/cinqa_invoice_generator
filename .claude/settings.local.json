@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --test tests/app-server.test.js)",
+      "Bash(npx tsc *)",
+      "Bash(node --test tests/)",
+      "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('app-server imports ok'\\)\\).catch\\(e => console.error\\('ERROR:', e.message\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(node --input-type=module --eval ' *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\)\\)\\)\")"
+    ]
+  }
+}

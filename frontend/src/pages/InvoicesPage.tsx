@@ -198,7 +198,7 @@ export default function InvoicesPage() {
             <AlertDialogTitle>Delete invoice</AlertDialogTitle>
             <AlertDialogDescription>
               {invoicePendingDelete
-                ? `Delete ${invoicePendingDelete.invoiceNo}? This will also remove its invoice line items from Airtable. Sequence numbers will not be reused.`
+                ? `Delete ${invoicePendingDelete.invoiceNo}? This will also remove all line items. Sequence numbers are not reused.`
                 : "Delete this invoice?"}
             </AlertDialogDescription>
           </AlertDialogHeader>

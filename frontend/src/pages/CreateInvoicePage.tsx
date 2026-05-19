@@ -17,7 +17,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { getActualInvoicePdfDownloadUrl } from "@/services/invoicePdf";
 
 const COMPANY_STATE_CODE = 24;
 
@@ -132,46 +131,17 @@ export default function CreateInvoicePage() {
     return { amount, cgst, sgst, igst, total };
   }, [invoiceType, isIntraState, lineItems, showQuantity]);
 
-  const createdInvoiceDownloadUrl = submittedInvoice?.invoiceNo
-    ? getActualInvoicePdfDownloadUrl({
-        id: submittedInvoice.invoiceRecordId ? String(submittedInvoice.invoiceRecordId) : "",
-        invoiceNo: submittedInvoice.invoiceNo,
-        idempotencyKey: "",
-        invoiceDate,
-        dueDate: "",
-        clientName: selectedClient?.name || "",
-        gstin: selectedClient?.gstin || "",
-        state: selectedClient?.state || "",
-        stateCode: selectedClient?.stateCode || 0,
-        placeOfSupply: "",
-        gstType: invoiceType === "proforma" ? "NONE" : isIntraState ? "CGST/SGST" : "IGST",
-        amount: totals.amount,
-        cgst: totals.cgst,
-        sgst: totals.sgst,
-        igst: totals.igst,
-        total: typeof submittedInvoice.total === "number" ? submittedInvoice.total : totals.total,
-        sac: lineItems[0]?.sac || "",
-        reverseCharge: "No",
-        status: "generated",
-        totalInWords: "",
-        googleDriveUrl: submittedInvoice.googleDriveUrl ? String(submittedInvoice.googleDriveUrl) : "",
-        googleDriveFileId: submittedInvoice.googleDriveFileId ? String(submittedInvoice.googleDriveFileId) : "",
-        invoiceType,
-      })
-    : null;
+  const createdInvoiceDownloadUrl = useMemo(() => {
+    if (!submittedInvoice?.invoiceNo || !submittedInvoice.invoiceRecordId) return null;
+    return `/api/invoices/${submittedInvoice.invoiceRecordId}/pdf?download=1`;
+  }, [submittedInvoice]);
 
   const handleDownloadCreatedInvoice = () => {
-    if (!createdInvoiceDownloadUrl || !submittedInvoice?.invoiceNo) {
+    if (!createdInvoiceDownloadUrl) {
       toast.error("PDF is not available for download yet.");
       return;
     }
-
-    const link = document.createElement("a");
-    link.href = createdInvoiceDownloadUrl;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.download = `${submittedInvoice.invoiceNo.replace(/\//g, "-")}.pdf`;
-    link.click();
+    window.open(createdInvoiceDownloadUrl, "_blank", "noopener,noreferrer");
   };
 
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {

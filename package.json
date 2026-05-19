@@ -8,6 +8,7 @@
     "test": "node --test",
     "generate:sample": "node scripts/generate-sample.js",
     "pdf:service": "node scripts/pdf-service.js",
+    "pdf:worker": "node scripts/pdf-worker.js",
     "app:server": "node scripts/app-server.js",
     "frontend:install": "npm install --prefix frontend",
     "frontend:dev": "npm run dev --prefix frontend",
@@ -17,6 +18,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.50.0",
     "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "puppeteer": "^24.40.0"

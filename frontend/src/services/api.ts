@@ -29,9 +29,8 @@ export interface CreateClientPayload {
 export interface CreateInvoiceResult {
   invoiceNo?: string;
   total?: number;
-  googleDriveUrl?: string;
-  googleDriveFileId?: string;
   invoiceRecordId?: string;
+  status?: string;
   [key: string]: unknown;
 }
 

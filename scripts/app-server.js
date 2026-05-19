@@ -6,7 +6,13 @@ import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import express from 'express';
 
-import { normalizeInvoiceRequest } from '../src/services/validation.js';
+import { queryClients, getClientById, createClientRecord, updateClientRecord } from '../src/repositories/supabase/client-repository.js';
+import { listInvoices, getInvoiceDetail, deleteInvoice, updateInvoiceStatus } from '../src/repositories/supabase/invoice-repository.js';
+import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
+import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
+import { getSignedPdfUrl, deleteStoredPdf } from '../src/services/pdf-storage.js';
+import { renderInvoicePdfBuffer } from '../src/services/pdf.js';
+import { getSupabaseClient, getDefaultOrgId } from '../src/lib/supabase.js';
 
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFilePath);
@@ -17,12 +23,9 @@ const frontendDistDir = path.join(rootDir, 'frontend', 'dist');
 dotenv.config({ path: path.join(rootDir, '.env'), quiet: true });
 dotenv.config({ path: path.join(parentDir, '.env'), override: false, quiet: true });
 
-const DEFAULT_AIRTABLE_TABLES = {
-  clients: 'clients',
-  invoices: 'invoices',
-  lineItems: 'invoice_line_items'
-};
 const APP_SESSION_COOKIE_NAME = 'cinqa_operator_session';
+
+// ── Config helpers ────────────────────────────────────────────────────────────
 
 function getEnv(name, fallback = null) {
   const value = process.env[name];
@@ -33,80 +36,21 @@ function hasEnv(name) {
   return Boolean(getEnv(name));
 }
 
-function requireEnv(name) {
-  const value = getEnv(name);
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
-
-function buildInvoiceWebhookUrl() {
-  const explicit = getEnv('CREATE_INVOICE_WEBHOOK_URL');
-  if (explicit) {
-    return explicit;
-  }
-
-  const base = getEnv('WEBHOOK_URL');
-  if (!base) {
-    throw new Error('Missing CREATE_INVOICE_WEBHOOK_URL or WEBHOOK_URL environment variable.');
-  }
-
-  return `${base.replace(/\/$/, '')}/webhook/create-invoice`;
-}
-
-function getConfiguredInvoiceWebhookUrl() {
-  try {
-    return buildInvoiceWebhookUrl();
-  } catch {
-    return null;
-  }
-}
-
-function getInvoiceWebhookSource() {
-  if (hasEnv('CREATE_INVOICE_WEBHOOK_URL')) {
-    return 'CREATE_INVOICE_WEBHOOK_URL';
-  }
-
-  if (hasEnv('WEBHOOK_URL')) {
-    return 'WEBHOOK_URL';
-  }
-
-  return null;
-}
+// ── Health builders ───────────────────────────────────────────────────────────
 
 function getFrontendStaticDir() {
   return existsSync(frontendDistDir) ? frontendDistDir : null;
 }
 
-function buildHealthWarnings(createInvoiceWebhookUrl) {
+function buildHealthWarnings() {
   const warnings = [];
-
-  if (!hasEnv('AIRTABLE_API_TOKEN')) {
-    warnings.push('AIRTABLE_API_TOKEN is missing.');
-  }
-
-  if (!hasEnv('AIRTABLE_BASE_ID')) {
-    warnings.push('AIRTABLE_BASE_ID is missing.');
-  }
-
-  if (!createInvoiceWebhookUrl) {
-    warnings.push('CREATE_INVOICE_WEBHOOK_URL or WEBHOOK_URL is missing.');
-  }
-
-  if (!isAppAuthConfigured()) {
-    warnings.push('APP_AUTH_USERNAME, APP_AUTH_PASSWORD, or APP_SESSION_SECRET is missing.');
-  }
-
+  if (!hasEnv('SUPABASE_URL')) warnings.push('SUPABASE_URL is missing.');
+  if (!hasEnv('SUPABASE_SERVICE_ROLE_KEY')) warnings.push('SUPABASE_SERVICE_ROLE_KEY is missing.');
+  if (!isAppAuthConfigured()) warnings.push('APP_AUTH_USERNAME, APP_AUTH_PASSWORD, or APP_SESSION_SECRET is missing.');
   return warnings;
 }
 
 function buildHealthPayload() {
-  const createInvoiceWebhookUrl = getConfiguredInvoiceWebhookUrl();
-  const airtableConfigured = hasEnv('AIRTABLE_API_TOKEN') && hasEnv('AIRTABLE_BASE_ID');
-  const invoiceWebhookConfigured = Boolean(createInvoiceWebhookUrl);
-
   return {
     ok: true,
     appName: 'Cinqa Invoice Desk',
@@ -114,27 +58,19 @@ function buildHealthPayload() {
     companyStateCode: Number(getEnv('COMPANY_STATE_CODE', '24')),
     defaultSac: getEnv('DEFAULT_SAC', '998314'),
     paymentTermsDays: Number(getEnv('PAYMENT_TERMS_DAYS', '10')),
-    airtableConfigured,
-    invoiceWebhookConfigured,
-    createInvoiceWebhookUrl,
+    supabaseConfigured: hasEnv('SUPABASE_URL') && hasEnv('SUPABASE_SERVICE_ROLE_KEY'),
     config: {
-      airtable: {
-        hasApiToken: hasEnv('AIRTABLE_API_TOKEN'),
-        hasBaseId: hasEnv('AIRTABLE_BASE_ID'),
-        tables: {
-          clients: getAirtableTableName('clients'),
-          invoices: getAirtableTableName('invoices'),
-          lineItems: getAirtableTableName('lineItems')
-        }
-      },
-      webhook: {
-        source: getInvoiceWebhookSource(),
-        url: createInvoiceWebhookUrl
+      supabase: {
+        hasUrl: hasEnv('SUPABASE_URL'),
+        hasServiceKey: hasEnv('SUPABASE_SERVICE_ROLE_KEY'),
+        orgId: getEnv('SUPABASE_DEFAULT_ORG_ID', '00000000-0000-0000-0000-000000000001')
       }
     },
-    warnings: buildHealthWarnings(createInvoiceWebhookUrl)
+    warnings: buildHealthWarnings()
   };
 }
+
+// ── Error types ───────────────────────────────────────────────────────────────
 
 class HttpError extends Error {
   constructor(statusCode, message) {
@@ -143,6 +79,8 @@ class HttpError extends Error {
     this.statusCode = statusCode;
   }
 }
+
+// ── Session auth ──────────────────────────────────────────────────────────────
 
 function getAppAuthConfig() {
   return {
@@ -164,27 +102,19 @@ function parseCookies(cookieHeader = '') {
       .map((part) => part.trim())
       .filter(Boolean)
       .map((part) => {
-        const separatorIndex = part.indexOf('=');
-        if (separatorIndex === -1) {
-          return [part, ''];
-        }
-
-        return [part.slice(0, separatorIndex), decodeURIComponent(part.slice(separatorIndex + 1))];
+        const sep = part.indexOf('=');
+        return sep === -1 ? [part, ''] : [part.slice(0, sep), decodeURIComponent(part.slice(sep + 1))];
       })
   );
 }
 
 function getAuthCookieValue(request) {
-  const cookies = parseCookies(request.headers.cookie || '');
-  return cookies[APP_SESSION_COOKIE_NAME] || null;
+  return parseCookies(request.headers.cookie || '')[APP_SESSION_COOKIE_NAME] || null;
 }
 
 function createSessionSignature(payload) {
-  const sessionSecret = getAppAuthConfig().sessionSecret;
-  if (!sessionSecret) {
-    throw new Error('APP_SESSION_SECRET is not configured.');
-  }
-
+  const { sessionSecret } = getAppAuthConfig();
+  if (!sessionSecret) throw new Error('APP_SESSION_SECRET is not configured.');
   return crypto.createHmac('sha256', sessionSecret).update(payload).digest('base64url');
 }
 
@@ -196,9 +126,7 @@ function createAuthSessionToken(username) {
 }
 
 function verifyAuthSessionToken(token) {
-  if (!token || !token.includes('.')) {
-    return null;
-  }
+  if (!token || !token.includes('.')) return null;
 
   const [payload, providedSignature] = token.split('.');
   const expectedSignature = createSessionSignature(payload);
@@ -211,33 +139,21 @@ function verifyAuthSessionToken(token) {
 
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (!session || typeof session.username !== 'string' || Number(session.expiresAt) <= Date.now()) {
-      return null;
-    }
-
-    return {
-      username: session.username,
-      expiresAt: Number(session.expiresAt)
-    };
+    if (!session || typeof session.username !== 'string' || Number(session.expiresAt) <= Date.now()) return null;
+    return { username: session.username, expiresAt: Number(session.expiresAt) };
   } catch {
     return null;
   }
 }
 
 function getAuthSession(request) {
-  if (!isAppAuthConfigured()) {
-    return null;
-  }
-
+  if (!isAppAuthConfigured()) return null;
   return verifyAuthSessionToken(getAuthCookieValue(request));
 }
 
 function isSecureCookieRequest(request) {
   const explicit = getEnv('APP_COOKIE_SECURE');
-  if (explicit) {
-    return explicit.toLowerCase() === 'true';
-  }
-
+  if (explicit) return explicit.toLowerCase() === 'true';
   return request.secure || request.get('x-forwarded-proto') === 'https';
 }
 
@@ -264,11 +180,7 @@ function clearAuthSessionCookie(request, response) {
 function constantTimeEqual(left, right) {
   const leftBuffer = Buffer.from(left, 'utf8');
   const rightBuffer = Buffer.from(right, 'utf8');
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-
+  if (leftBuffer.length !== rightBuffer.length) return false;
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
@@ -288,215 +200,25 @@ function requireAuthenticatedApp(request, response, next) {
   next();
 }
 
-function buildAirtableTableUrl(tableName) {
-  const baseId = requireEnv('AIRTABLE_BASE_ID');
-  return `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`;
-}
-
-function getAirtableTableName(kind) {
-  const tableMap = {
-    clients: getEnv('AIRTABLE_TABLE_CLIENTS', DEFAULT_AIRTABLE_TABLES.clients),
-    invoices: getEnv('AIRTABLE_TABLE_INVOICES', DEFAULT_AIRTABLE_TABLES.invoices),
-    lineItems: getEnv('AIRTABLE_TABLE_LINE_ITEMS', DEFAULT_AIRTABLE_TABLES.lineItems)
-  };
-
-  return tableMap[kind];
-}
-
-function buildAirtableHeaders() {
-  return {
-    Authorization: `Bearer ${requireEnv('AIRTABLE_API_TOKEN')}`,
-    'Content-Type': 'application/json'
-  };
-}
-
-function escapeFormulaValue(value) {
-  return String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-}
-
-async function airtableRequest(url, init = {}) {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...buildAirtableHeaders(),
-      ...(init.headers || {})
-    }
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Airtable request failed (${response.status}): ${errorText}`);
-  }
-
-  return response.status === 204 ? null : response.json();
-}
-
-export function normalizeClientFields(fields, recordId) {
-  const addressLines = [fields['Address Line 1'], fields['Address Line 2'], fields['Address Line 3']].filter(Boolean);
-  const activeValue = fields.Active;
-  const isActive =
-    activeValue === true ||
-    activeValue === 1 ||
-    String(activeValue).toLowerCase() === 'true' ||
-    String(activeValue).toLowerCase() === 'yes' ||
-    String(activeValue).toLowerCase() === 'active';
-
-  return {
-    id: recordId,
-    name: fields['Client Name'] || '',
-    gstin: fields.GSTIN || '',
-    state: fields.State || '',
-    stateCode: Number(fields['State Code'] || 0),
-    addressLines,
-    defaultSac: fields['Default SAC'] === undefined || fields['Default SAC'] === null ? '' : String(fields['Default SAC']),
-    defaultPaymentTermsDays: Number(fields['Default Payment Terms Days'] || 0),
-    email: fields.Email || '',
-    phone: fields.Phone || '',
-    active: isActive,
-    notes: fields.Notes || ''
-  };
-}
-
-function getLinkedRecordId(fields, fieldName) {
-  if (!fieldName) {
-    return '';
-  }
-
-  const value = fields[fieldName];
-  if (!Array.isArray(value) || value.length === 0) {
-    return '';
-  }
-
-  return String(value[0] || '');
-}
-
-function normalizeInvoiceSummary(record) {
-  const fields = record.fields || {};
-  const clientLinkField = getEnv('AIRTABLE_FIELD_CLIENT_LINK');
-  const sourceProformaLinkField = getEnv('AIRTABLE_FIELD_PROFORMA_LINK');
-  const sourceProformaInvoiceNo = fields['Source Proforma Invoice No'] || '';
-  const sourceProformaInvoiceDate = fields['Source Proforma Invoice Date'] || '';
-  const purchaseOrderNo = fields['Purchase Order No'] || '';
-  const purchaseOrderDate = fields['Purchase Order Date'] || '';
-
-  return {
-    id: record.id,
-    invoiceNo: fields['Invoice No'] || '',
-    idempotencyKey: fields['Idempotency Key'] || '',
-    invoiceType: fields['Invoice Type'] || 'tax',
-    showQuantity: fields['Show Quantity'] === true || String(fields['Show Quantity']).toLowerCase() === 'true',
-    includeDueDate:
-      fields['Include Due Date'] === undefined ||
-      fields['Include Due Date'] === null ||
-      fields['Include Due Date'] === ''
-        ? true
-        : fields['Include Due Date'] === true || String(fields['Include Due Date']).toLowerCase() === 'true',
-    invoiceDate: fields['Invoice Date'] || '',
-    dueDate: fields['Due Date'] || '',
-    clientRecordId: getLinkedRecordId(fields, clientLinkField),
-    clientName: fields['Client Name'] || fields.Client || '',
-    gstin: fields.GSTIN || '',
-    state: fields.State || '',
-    stateCode: Number(fields['State Code'] || 0),
-    sourceProforma:
-      sourceProformaInvoiceNo || sourceProformaInvoiceDate || getLinkedRecordId(fields, sourceProformaLinkField)
-        ? {
-            invoiceRecordId: getLinkedRecordId(fields, sourceProformaLinkField),
-            invoiceNo: sourceProformaInvoiceNo,
-            invoiceDate: sourceProformaInvoiceDate
-          }
-        : null,
-    purchaseOrder:
-      purchaseOrderNo || purchaseOrderDate
-        ? {
-            number: purchaseOrderNo,
-            date: purchaseOrderDate
-          }
-        : null,
-    placeOfSupply: fields['Place of Supply'] || '',
-    gstType: fields['GST Type'] || '',
-    amount: Number(fields.Amount || 0),
-    cgst: Number(fields.CGST || 0),
-    sgst: Number(fields.SGST || 0),
-    igst: Number(fields.IGST || 0),
-    total: Number(fields.Total || 0),
-    sac: fields.SAC || '',
-    reverseCharge: fields['Reverse Charge'] || '',
-    status: fields.Status || '',
-    totalInWords: fields['Total In Words'] || '',
-    googleDriveUrl: fields['Google Drive URL'] || '',
-    googleDriveFileId: fields['Google Drive File ID'] || ''
-  };
-}
-
-function buildInvoiceFilterFormula({ search, status }) {
-  const clauses = [];
-
-  if (search) {
-    const value = escapeFormulaValue(search.toLowerCase());
-    clauses.push(
-      `OR(SEARCH(LOWER("${value}"), LOWER({Invoice No})) > 0, SEARCH(LOWER("${value}"), LOWER({Client Name})) > 0)`
-    );
-  }
-
-  if (status && status !== 'all') {
-    clauses.push(`LOWER({Status} & "") = "${escapeFormulaValue(status.toLowerCase())}"`);
-  }
-
-  if (clauses.length === 0) {
-    return null;
-  }
-
-  return clauses.length === 1 ? clauses[0] : `AND(${clauses.join(',')})`;
-}
-
-function normalizeInvoiceLineItem(record) {
-  const fields = record.fields || {};
-  return {
-    id: record.id,
-    invoiceNo: fields['Invoice No'] || '',
-    lineNumber: Number(fields['Line No'] || 0),
-    description: fields.Description || '',
-    sac: fields.SAC || '',
-    quantity: fields.Quantity === undefined || fields.Quantity === null ? null : Number(fields.Quantity),
-    unitPrice:
-      fields['Unit Price'] === undefined || fields['Unit Price'] === null
-        ? fields['Unit Rate'] === undefined || fields['Unit Rate'] === null
-          ? null
-          : Number(fields['Unit Rate'])
-        : Number(fields['Unit Price']),
-    amount: Number(fields.Amount || 0),
-    taxableValue: Number(fields['Taxable Value'] || 0),
-    cgst: Number(fields.CGST || 0),
-    sgst: Number(fields.SGST || 0),
-    igst: Number(fields.IGST || 0),
-    total: Number(fields.Total || 0)
-  };
-}
+// ── HTTP request validation ───────────────────────────────────────────────────
 
 function validateTrimmedString(value, fieldName) {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new HttpError(400, `${fieldName} is required.`);
   }
-
   return value.trim();
 }
 
 function validateDateString(value, fieldName) {
   const normalized = validateTrimmedString(value, fieldName);
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(new Date(normalized).getTime())) {
     throw new HttpError(400, `${fieldName} must be a valid date.`);
   }
-
   return normalized;
 }
 
 function validateOptionalString(value) {
-  if (value === undefined || value === null) {
-    return '';
-  }
-
+  if (value === undefined || value === null) return '';
   return String(value).trim();
 }
 
@@ -505,7 +227,6 @@ function validatePositiveAmount(value, fieldName) {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new HttpError(400, `${fieldName} must be a positive number.`);
   }
-
   return Math.round((amount + Number.EPSILON) * 100) / 100;
 }
 
@@ -515,17 +236,9 @@ function validateClientPayload(payload) {
   const state = validateTrimmedString(payload.state, 'State');
   const stateCode = Number(payload.stateCode);
 
-  if (!/^[0-9]{2}[A-Z0-9]{13}$/.test(gstin)) {
-    throw new HttpError(400, 'GSTIN must be a valid 15-character GSTIN.');
-  }
-
-  if (!Number.isInteger(stateCode) || stateCode <= 0) {
-    throw new HttpError(400, 'State Code must be a positive integer.');
-  }
-
-  if (Number(gstin.slice(0, 2)) !== stateCode) {
-    throw new HttpError(400, 'GSTIN state code must match State Code.');
-  }
+  if (!/^[0-9]{2}[A-Z0-9]{13}$/.test(gstin)) throw new HttpError(400, 'GSTIN must be a valid 15-character GSTIN.');
+  if (!Number.isInteger(stateCode) || stateCode <= 0) throw new HttpError(400, 'State Code must be a positive integer.');
+  if (Number(gstin.slice(0, 2)) !== stateCode) throw new HttpError(400, 'GSTIN state code must match State Code.');
 
   return {
     name,
@@ -542,270 +255,6 @@ function validateClientPayload(payload) {
     notes: validateOptionalString(payload.notes),
     active: payload.active === undefined ? true : Boolean(payload.active)
   };
-}
-
-function normalizeSacForAirtable(value) {
-  const normalizedValue = validateOptionalString(value);
-  if (!normalizedValue) {
-    return '';
-  }
-
-  return /^[0-9]+$/.test(normalizedValue) ? Number(normalizedValue) : normalizedValue;
-}
-
-function buildClientAirtableFields(client) {
-  return {
-    'Client Name': client.name,
-    GSTIN: client.gstin,
-    State: client.state,
-    'State Code': client.stateCode,
-    'Address Line 1': client.addressLine1,
-    'Address Line 2': client.addressLine2,
-    'Address Line 3': client.addressLine3,
-    'Default SAC': normalizeSacForAirtable(client.defaultSac),
-    'Default Payment Terms Days': client.defaultPaymentTermsDays,
-    Email: client.email,
-    Phone: client.phone,
-    Active: client.active,
-    Notes: client.notes
-  };
-}
-
-async function listClients(search = '') {
-  const tableName = requireEnv('AIRTABLE_TABLE_CLIENTS');
-  const query = new URLSearchParams();
-  query.set('pageSize', '100');
-  query.append('sort[0][field]', 'Client Name');
-  query.append('sort[0][direction]', 'asc');
-
-  if (search) {
-    query.set(
-      'filterByFormula',
-      `SEARCH(LOWER("${escapeFormulaValue(search)}"), LOWER({Client Name}))`
-    );
-  }
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
-  return (response.records || []).map((record) => normalizeClientFields(record.fields || {}, record.id));
-}
-
-export function buildClientFilterFormula({ search, active }) {
-  const clauses = [];
-
-  if (search) {
-    const value = escapeFormulaValue(search.toLowerCase());
-    clauses.push(`OR(SEARCH(LOWER("${value}"), LOWER({Client Name})) > 0, SEARCH(LOWER("${value}"), LOWER({GSTIN})) > 0)`);
-  }
-
-  if (active === 'active') {
-    clauses.push('OR({Active} = 1, LOWER({Active} & "") = "active", LOWER({Active} & "") = "yes", {Active} = TRUE())');
-  }
-
-  if (active === 'inactive') {
-    clauses.push('NOT(OR({Active} = 1, LOWER({Active} & "") = "active", LOWER({Active} & "") = "yes", {Active} = TRUE()))');
-  }
-
-  if (clauses.length === 0) {
-    return null;
-  }
-
-  return clauses.length === 1 ? clauses[0] : `AND(${clauses.join(',')})`;
-}
-
-async function queryClients({ search = '', active = 'all' } = {}) {
-  const tableName = getAirtableTableName('clients');
-  const query = new URLSearchParams();
-  query.set('pageSize', '100');
-  query.append('sort[0][field]', 'Client Name');
-  query.append('sort[0][direction]', 'asc');
-
-  const filterByFormula = buildClientFilterFormula({ search, active });
-  if (filterByFormula) {
-    query.set('filterByFormula', filterByFormula);
-  }
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
-  return (response.records || []).map((record) => normalizeClientFields(record.fields || {}, record.id));
-}
-
-async function getClientRecord(clientId) {
-  const tableName = getAirtableTableName('clients');
-  const record = await airtableRequest(`${buildAirtableTableUrl(tableName)}/${clientId}`);
-  return normalizeClientFields(record.fields || {}, record.id);
-}
-
-async function getClientRecordByGstin(gstin) {
-  const tableName = getAirtableTableName('clients');
-  const query = new URLSearchParams();
-  query.set('pageSize', '1');
-  query.set('filterByFormula', `{GSTIN} = "${escapeFormulaValue(gstin)}"`);
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
-  const record = response.records?.[0];
-
-  return record ? normalizeClientFields(record.fields || {}, record.id) : null;
-}
-
-async function createClient(payload) {
-  const client = validateClientPayload(payload);
-  const tableName = getAirtableTableName('clients');
-  const body = {
-    fields: buildClientAirtableFields(client)
-  };
-
-  const response = await airtableRequest(buildAirtableTableUrl(tableName), {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
-
-  return normalizeClientFields(response.fields || {}, response.id);
-}
-
-async function updateClient(clientId, payload) {
-  const normalizedClientId = validateTrimmedString(clientId, 'Client ID');
-  const client = validateClientPayload(payload);
-  const tableName = getAirtableTableName('clients');
-  const body = {
-    fields: buildClientAirtableFields(client)
-  };
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}/${normalizedClientId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body)
-  });
-
-  return normalizeClientFields(response.fields || {}, response.id);
-}
-
-async function listInvoices({ search = '', status = 'all' } = {}) {
-  const tableName = getAirtableTableName('invoices');
-  const query = new URLSearchParams();
-  query.set('pageSize', '50');
-  query.append('sort[0][field]', 'Invoice Date');
-  query.append('sort[0][direction]', 'desc');
-
-  const filterByFormula = buildInvoiceFilterFormula({ search, status });
-  if (filterByFormula) {
-    query.set('filterByFormula', filterByFormula);
-  }
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
-  return (response.records || []).map(normalizeInvoiceSummary);
-}
-
-async function getInvoiceRecord(invoiceId) {
-  const tableName = getAirtableTableName('invoices');
-  const record = await airtableRequest(`${buildAirtableTableUrl(tableName)}/${validateTrimmedString(invoiceId, 'Invoice ID')}`);
-  return normalizeInvoiceSummary(record);
-}
-
-async function listInvoiceLineItems(invoiceNo) {
-  const tableName = getAirtableTableName('lineItems');
-  const query = new URLSearchParams();
-  query.set('pageSize', '100');
-  query.append('sort[0][field]', 'Line No');
-  query.append('sort[0][direction]', 'asc');
-  query.set('filterByFormula', `{Invoice No} = "${escapeFormulaValue(invoiceNo)}"`);
-
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}?${query.toString()}`);
-  return (response.records || []).map(normalizeInvoiceLineItem);
-}
-
-async function getInvoiceDetail(invoiceId) {
-  const invoice = await getInvoiceRecord(invoiceId);
-  const lineItems = invoice.invoiceNo ? await listInvoiceLineItems(invoice.invoiceNo) : [];
-  return {
-    ...invoice,
-    lineItems
-  };
-}
-
-async function deleteAirtableRecord(tableName, recordId) {
-  await airtableRequest(`${buildAirtableTableUrl(tableName)}/${validateTrimmedString(recordId, 'Record ID')}`, {
-    method: 'DELETE'
-  });
-}
-
-async function deleteInvoice(invoiceId) {
-  const invoice = await getInvoiceDetail(invoiceId);
-  const lineItemsTableName = getAirtableTableName('lineItems');
-  const invoicesTableName = getAirtableTableName('invoices');
-
-  for (const lineItem of invoice.lineItems || []) {
-    await deleteAirtableRecord(lineItemsTableName, lineItem.id);
-  }
-
-  await deleteAirtableRecord(invoicesTableName, invoice.id);
-
-  return {
-    invoiceId: invoice.id,
-    invoiceNo: invoice.invoiceNo,
-    deletedLineItems: (invoice.lineItems || []).length
-  };
-}
-
-function validateInvoiceStatus(status) {
-  const normalizedStatus = validateTrimmedString(status, 'Status').toLowerCase();
-  const allowedStatuses = new Set(['generated', 'pending', 'sent', 'paid', 'cancelled']);
-  if (!allowedStatuses.has(normalizedStatus)) {
-    throw new HttpError(400, 'Status must be one of: generated, pending, sent, paid, cancelled.');
-  }
-
-  return normalizedStatus;
-}
-
-function formatInvoiceStatusLabel(status) {
-  const normalizedStatus = validateInvoiceStatus(status);
-  return normalizedStatus.charAt(0).toUpperCase() + normalizedStatus.slice(1);
-}
-
-function buildInvoiceStatusCandidates(status) {
-  const normalizedStatus = validateInvoiceStatus(status);
-  return [...new Set([normalizedStatus, formatInvoiceStatusLabel(normalizedStatus)])];
-}
-
-function isAirtableStatusValueError(error) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  return (
-    error.message.includes('INVALID_MULTIPLE_CHOICE_OPTIONS') ||
-    (error.message.includes('INVALID_VALUE_FOR_COLUMN') && error.message.includes('Status'))
-  );
-}
-
-async function patchInvoiceStatusRecord(invoiceId, statusValue) {
-  const tableName = getAirtableTableName('invoices');
-  const response = await airtableRequest(`${buildAirtableTableUrl(tableName)}/${invoiceId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      fields: {
-        Status: statusValue
-      }
-    })
-  });
-
-  return normalizeInvoiceSummary(response);
-}
-
-async function updateInvoiceStatus(invoiceId, status) {
-  const normalizedInvoiceId = validateTrimmedString(invoiceId, 'Invoice ID');
-  const statusCandidates = buildInvoiceStatusCandidates(status);
-  let lastError = null;
-
-  for (const statusCandidate of statusCandidates) {
-    try {
-      return await patchInvoiceStatusRecord(normalizedInvoiceId, statusCandidate);
-    } catch (error) {
-      lastError = error;
-      if (!isAirtableStatusValueError(error) || statusCandidate === statusCandidates.at(-1)) {
-        throw error;
-      }
-    }
-  }
-
-  throw lastError ?? new Error('Unable to update invoice status.');
 }
 
 function normalizeInvoiceLineItems(lineItems, showQuantity) {
@@ -833,158 +282,24 @@ function normalizeInvoiceLineItems(lineItems, showQuantity) {
   }));
 }
 
-function buildInvoicePayload({
-  invoiceDate,
-  client,
-  lineItems,
-  invoiceType,
-  showQuantity,
-  includeDueDate,
-  sourceProforma = null,
-  purchaseOrder = null
-}) {
-  return normalizeInvoiceRequest({
-    idempotencyKey: `ui-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
-    invoiceDate,
-    sequence: 1,
-    invoiceType,
-    showQuantity,
-    includeDueDate,
-    ...(sourceProforma ? { sourceProforma } : {}),
-    ...(purchaseOrder ? { purchaseOrder } : {}),
-    client: {
-      name: client.name,
-      gstin: client.gstin,
-      state: client.state,
-      stateCode: client.stateCode,
-      addressLines: client.addressLines,
-      defaultSac: client.defaultSac,
-      defaultPaymentTermsDays: client.defaultPaymentTermsDays
-    },
-    lineItems
-  });
+function validateInvoiceStatus(status) {
+  const normalized = validateTrimmedString(status, 'Status').toLowerCase();
+  const allowed = new Set(['generated', 'pending', 'sent', 'paid', 'cancelled']);
+  if (!allowed.has(normalized)) {
+    throw new HttpError(400, 'Status must be one of: generated, pending, sent, paid, cancelled.');
+  }
+  return normalized;
 }
 
-async function postCreateInvoiceWebhook(payload) {
-  const createInvoiceWebhookUrl = getConfiguredInvoiceWebhookUrl();
-  if (!createInvoiceWebhookUrl) {
-    throw new HttpError(500, 'Create invoice webhook URL is not configured.');
-  }
-
-  const webhookSecret = getEnv('N8N_WEBHOOK_SECRET');
-  const response = await fetch(createInvoiceWebhookUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(webhookSecret ? { 'x-webhook-secret': webhookSecret } : {})
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    const normalizedErrorText = errorText.trim() || 'No response body.';
-    throw new HttpError(
-      response.status >= 500 ? 502 : response.status,
-      `Create invoice webhook failed (${response.status}): ${normalizedErrorText}`
-    );
-  }
-
-  const responseText = await response.text();
-  if (!responseText.trim()) {
-    return {
-      invoiceNo: null,
-      status: 'accepted'
-    };
-  }
-
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    return JSON.parse(responseText);
-  }
-
-  return {
-    invoiceNo: null,
-    status: 'accepted',
-    rawResponse: responseText
-  };
-}
-
-async function createInvoiceFromClient({ clientId, invoiceDate, lineItems, invoiceType, showQuantity, includeDueDate }) {
-  const client = await getClientRecord(clientId);
-  const payload = buildInvoicePayload({
-    invoiceDate: validateTrimmedString(invoiceDate, 'Invoice Date'),
-    client,
-    lineItems: normalizeInvoiceLineItems(lineItems, Boolean(showQuantity)),
-    invoiceType,
-    showQuantity,
-    includeDueDate
-  });
-
-  return postCreateInvoiceWebhook(payload);
-}
-
-async function resolveInvoiceClient(invoice) {
-  if (invoice.clientRecordId) {
-    return getClientRecord(invoice.clientRecordId);
-  }
-
-  if (invoice.gstin) {
-    const client = await getClientRecordByGstin(invoice.gstin);
-    if (client) {
-      return client;
-    }
-  }
-
-  throw new HttpError(409, `Unable to resolve the client record for ${invoice.invoiceNo}. Link the invoice to a client or ensure GSTIN matches a client record.`);
-}
-
-function getTodayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-async function convertProformaToTaxInvoice({ invoiceId, purchaseOrderNumber, purchaseOrderDate, invoiceDate, sac }) {
-  const proformaInvoice = await getInvoiceDetail(invoiceId);
-
-  if (proformaInvoice.invoiceType !== 'proforma') {
-    throw new HttpError(400, 'Only proforma invoices can be converted to tax invoices.');
-  }
-
-  const client = await resolveInvoiceClient(proformaInvoice);
-  const overrideSac = validateOptionalString(sac);
-  const payload = buildInvoicePayload({
-    invoiceDate: invoiceDate ? validateDateString(invoiceDate, 'Invoice Date') : getTodayIsoDate(),
-    client,
-    lineItems: normalizeInvoiceLineItems(
-      (proformaInvoice.lineItems || []).map((lineItem) => ({
-        ...lineItem,
-        ...(overrideSac ? { sac: overrideSac } : {})
-      })),
-      Boolean(proformaInvoice.showQuantity)
-    ),
-    invoiceType: 'tax',
-    showQuantity: Boolean(proformaInvoice.showQuantity),
-    includeDueDate: true,
-    sourceProforma: {
-      invoiceRecordId: proformaInvoice.id,
-      invoiceNo: proformaInvoice.invoiceNo,
-      invoiceDate: validateDateString(proformaInvoice.invoiceDate, 'Source Proforma Invoice Date')
-    },
-    purchaseOrder: {
-      number: validateTrimmedString(purchaseOrderNumber, 'Purchase Order No'),
-      date: validateDateString(purchaseOrderDate, 'Purchase Order Date')
-    }
-  });
-
-  return postCreateInvoiceWebhook(payload);
-}
+// ── Route handler wrapper ─────────────────────────────────────────────────────
 
 function handleRoute(handler) {
   return async (request, response) => {
     try {
       await handler(request, response);
     } catch (error) {
-      const statusCode = error instanceof HttpError ? error.statusCode : 500;
+      const hasStatusCode = error instanceof HttpError || error instanceof WorkflowError;
+      const statusCode = hasStatusCode ? error.statusCode : 500;
       console.error(`[${request.method} ${request.originalUrl}]`, error);
       response.status(statusCode).json({
         ok: false,
@@ -994,20 +309,21 @@ function handleRoute(handler) {
   };
 }
 
+// ── Express app ───────────────────────────────────────────────────────────────
+
 export function createApp() {
   const app = express();
   const staticDir = getFrontendStaticDir();
 
   app.set('trust proxy', Number(getEnv('APP_TRUST_PROXY', '1')));
-
   app.use(express.json({ limit: '1mb' }));
   app.use('/assets', express.static(path.join(rootDir, 'assets')));
   app.get('/brand/cinqa-logo', (_request, response) => {
     response.sendFile(path.join(rootDir, 'Cinqa Logo.jpeg'));
   });
-  if (staticDir) {
-    app.use(express.static(staticDir));
-  }
+  if (staticDir) app.use(express.static(staticDir));
+
+  // ── Public routes ──────────────────────────────────────────────────────────
 
   app.get('/api/health', (_request, response) => {
     response.json(buildHealthPayload());
@@ -1026,18 +342,13 @@ export function createApp() {
   app.post(
     '/api/auth/login',
     handleRoute(async (request, response) => {
-      if (!isAppAuthConfigured()) {
-        throw new HttpError(503, 'App authentication is not configured.');
-      }
+      if (!isAppAuthConfigured()) throw new HttpError(503, 'App authentication is not configured.');
 
       const username = validateTrimmedString(request.body.username, 'Username');
       const password = typeof request.body.password === 'string' ? request.body.password : '';
       const config = getAppAuthConfig();
 
-      if (!config.username || !config.password) {
-        throw new HttpError(503, 'App authentication is not configured.');
-      }
-
+      if (!config.username || !config.password) throw new HttpError(503, 'App authentication is not configured.');
       if (!constantTimeEqual(username, config.username) || !constantTimeEqual(password, config.password)) {
         throw new HttpError(401, 'Invalid username or password.');
       }
@@ -1051,6 +362,44 @@ export function createApp() {
     clearAuthSessionCookie(request, response);
     response.json({ ok: true, configured: isAppAuthConfigured(), authenticated: false, username: '' });
   });
+
+  // ── Public webhook (API-key auth, no session required) ────────────────────
+  // Drop-in replacement for the old n8n create-invoice webhook.
+  // Accepts the same payload format that n8n used to receive.
+  // Secure with WEBHOOK_API_KEY; leave unset for open (development only).
+
+  app.post(
+    '/webhook/create-invoice',
+    handleRoute(async (request, response) => {
+      const expectedKey = getEnv('WEBHOOK_API_KEY');
+      if (expectedKey) {
+        const provided = request.headers['x-webhook-secret'] || request.headers['x-api-key'];
+        if (!provided || provided !== expectedKey) {
+          throw new HttpError(401, 'Invalid or missing webhook API key.');
+        }
+      }
+
+      if (!request.body || typeof request.body !== 'object') {
+        throw new HttpError(400, 'Request body must be a JSON object.');
+      }
+
+      const result = await createInvoiceFromWebhookPayload(request.body);
+
+      if (!result.duplicate) {
+        scheduleInvoicePdfGeneration(result.invoiceRecordId, getDefaultOrgId());
+      }
+
+      response.status(result.duplicate ? 200 : 201).json({
+        ok: true,
+        duplicate: result.duplicate,
+        invoiceNo: result.invoiceNo,
+        invoiceRecordId: result.invoiceRecordId,
+        total: result.total
+      });
+    })
+  );
+
+  // ── Protected routes ───────────────────────────────────────────────────────
 
   app.use('/api', requireAuthenticatedApp);
 
@@ -1066,16 +415,18 @@ export function createApp() {
   app.post(
     '/api/clients',
     handleRoute(async (request, response) => {
-      const client = await createClient(request.body || {});
-      response.status(201).json({ ok: true, client });
+      const client = validateClientPayload(request.body || {});
+      const record = await createClientRecord(client);
+      response.status(201).json({ ok: true, client: record });
     })
   );
 
   app.put(
     '/api/clients/:clientId',
     handleRoute(async (request, response) => {
-      const client = await updateClient(request.params.clientId, request.body || {});
-      response.json({ ok: true, client });
+      const client = validateClientPayload(request.body || {});
+      const record = await updateClientRecord(request.params.clientId, client);
+      response.json({ ok: true, client: record });
     })
   );
 
@@ -1098,7 +449,9 @@ export function createApp() {
   app.patch(
     '/api/invoices/:invoiceId/status',
     handleRoute(async (request, response) => {
-      const invoice = await updateInvoiceStatus(request.params.invoiceId, request.body.status);
+      // PostgreSQL CHECK constraint enforces the allowed values — no multi-candidate retry needed
+      const status = validateInvoiceStatus(request.body.status);
+      const invoice = await updateInvoiceStatus(request.params.invoiceId, status);
       response.json({ ok: true, invoice });
     })
   );
@@ -1107,14 +460,21 @@ export function createApp() {
     '/api/invoices',
     handleRoute(async (request, response) => {
       const clientId = validateTrimmedString(request.body.clientId, 'Client');
+      const invoiceDate = validateTrimmedString(request.body.invoiceDate, 'Invoice Date');
+      const showQuantity = Boolean(request.body.showQuantity);
+      const lineItems = normalizeInvoiceLineItems(request.body.lineItems, showQuantity);
+
       const invoice = await createInvoiceFromClient({
         clientId,
-        invoiceDate: request.body.invoiceDate,
-        lineItems: request.body.lineItems,
+        invoiceDate,
+        lineItems,
         invoiceType: request.body.invoiceType,
-        showQuantity: request.body.showQuantity,
+        showQuantity,
         includeDueDate: request.body.includeDueDate
       });
+
+      // Trigger background PDF generation — does not block the response
+      scheduleInvoicePdfGeneration(invoice.invoiceRecordId, getDefaultOrgId());
 
       response.status(201).json({ ok: true, invoice });
     })
@@ -1125,12 +485,13 @@ export function createApp() {
     handleRoute(async (request, response) => {
       const invoice = await convertProformaToTaxInvoice({
         invoiceId: request.params.invoiceId,
-        purchaseOrderNumber: request.body.purchaseOrderNumber,
-        purchaseOrderDate: request.body.purchaseOrderDate,
-        invoiceDate: validateOptionalString(request.body.invoiceDate),
-        sac: request.body.sac
+        purchaseOrderNumber: validateTrimmedString(request.body.purchaseOrderNumber, 'Purchase Order No'),
+        purchaseOrderDate: validateDateString(request.body.purchaseOrderDate, 'Purchase Order Date'),
+        invoiceDate: validateOptionalString(request.body.invoiceDate) || null,
+        sac: validateOptionalString(request.body.sac)
       });
 
+      scheduleInvoicePdfGeneration(invoice.invoiceRecordId, getDefaultOrgId());
       response.status(201).json({ ok: true, invoice });
     })
   );
@@ -1139,9 +500,75 @@ export function createApp() {
     '/api/invoices/:invoiceId',
     handleRoute(async (request, response) => {
       const deleted = await deleteInvoice(request.params.invoiceId);
-      response.json({ ok: true, deleted });
+
+      // Best-effort: clean up Storage file if it was generated
+      if (deleted.pdfStoragePath) {
+        deleteStoredPdf(deleted.pdfStoragePath).catch((err) =>
+          console.error(`[Delete] Failed to remove stored PDF ${deleted.pdfStoragePath}:`, err.message)
+        );
+      }
+
+      // Don't expose internal storage path to the client
+      const { pdfStoragePath: _omit, ...clientDeleted } = deleted;
+      response.json({ ok: true, deleted: clientDeleted });
     })
   );
+
+  app.get(
+    '/api/invoices/:invoiceId/pdf-status',
+    handleRoute(async (request, response) => {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id, pdf_storage_path, pdf_generated_at')
+        .eq('id', request.params.invoiceId)
+        .single();
+
+      if (error) throw new HttpError(404, 'Invoice not found.');
+
+      response.json({
+        ok: true,
+        ready: Boolean(data.pdf_storage_path),
+        pdfStoragePath: data.pdf_storage_path || null,
+        generatedAt: data.pdf_generated_at || null
+      });
+    })
+  );
+
+  app.get(
+    '/api/invoices/:invoiceId/pdf',
+    handleRoute(async (request, response) => {
+      const invoiceRecord = await getInvoiceDetail(request.params.invoiceId);
+      const isDownload = request.query.download === '1';
+
+      // Fast path: PDF already stored — issue a signed URL redirect (instant)
+      if (invoiceRecord.pdfStoragePath) {
+        const ttl = isDownload ? 3600 : 86400;
+        const signedUrl = await getSignedPdfUrl(invoiceRecord.pdfStoragePath, ttl);
+        response.redirect(302, signedUrl);
+        return;
+      }
+
+      // Fallback: render on demand with Puppeteer (PDF job pending or failed)
+      let clientRecord = null;
+      try {
+        clientRecord = await resolveInvoiceClient(invoiceRecord);
+      } catch {
+        // Address lines will be omitted — PDF still renders
+      }
+
+      const invoice = buildInvoiceDocumentFromSnapshot(invoiceRecord, clientRecord);
+      const pdfBuffer = await renderInvoicePdfBuffer(invoice);
+      const filename = `${invoiceRecord.invoiceNo.replace(/\//g, '-')}.pdf`;
+
+      response.setHeader('Content-Type', 'application/pdf');
+      response.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`);
+      response.setHeader('Content-Length', pdfBuffer.length);
+      response.send(pdfBuffer);
+    })
+  );
+
+  // ── SPA fallback ───────────────────────────────────────────────────────────
 
   app.get('/', (_request, response) => {
     if (!staticDir) {
@@ -1151,7 +578,6 @@ export function createApp() {
       });
       return;
     }
-
     response.sendFile(path.join(staticDir, 'index.html'));
   });
 
@@ -1160,7 +586,6 @@ export function createApp() {
       response.status(404).json({ ok: false, error: 'Frontend build not found.' });
       return;
     }
-
     response.sendFile(path.join(staticDir, 'index.html'));
   });
 

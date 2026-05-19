@@ -74,8 +74,7 @@ export interface Invoice {
   paymentTermsLabel?: string;
   status: string;
   totalInWords: string;
-  googleDriveUrl: string;
-  googleDriveFileId: string;
+  pdfStoragePath?: string | null;
   lineItems?: InvoiceLineItem[];
 }
 
@@ -83,16 +82,13 @@ export interface HealthData {
   ok: boolean;
   appName: string;
   companyStateCode: number;
-  airtableConfigured: boolean;
-  invoiceWebhookConfigured: boolean;
-  createInvoiceWebhookUrl: string;
+  supabaseConfigured: boolean;
   warnings: string[];
   config: {
-    airtable: {
-      hasApiToken: boolean;
-      hasBaseId: boolean;
-      tables: { clients: string; invoices: string; lineItems: string };
+    supabase: {
+      hasUrl: boolean;
+      hasServiceKey: boolean;
+      orgId: string;
     };
-    webhook: { source: string | null; url: string | null };
   };
 }

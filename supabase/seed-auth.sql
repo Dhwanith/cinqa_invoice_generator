@@ -14,7 +14,7 @@
 INSERT INTO organization_members (organization_id, user_id, role)
 VALUES (
   '00000000-0000-0000-0000-000000000001',   -- Cinqa org (from seed.sql)
-  'YOUR_AUTH_USER_UUID',                     -- replace with actual UUID from Auth dashboard
+  'a48a452c-1929-4e78-ade8-61bbf8b6003a',                     -- replace with actual UUID from Auth dashboard
   'owner'
 )
 ON CONFLICT (organization_id, user_id) DO NOTHING;

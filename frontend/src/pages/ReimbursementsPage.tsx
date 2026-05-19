@@ -2,7 +2,7 @@ import { type FormEvent, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarIcon, Check, CheckCircle2, ChevronDown, ChevronUp,
-  CreditCard, Plus, Search, Trash2, X, LoaderCircle, Receipt,
+  CreditCard, Download, Plus, Search, Trash2, X, LoaderCircle, Receipt,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -23,6 +23,7 @@ import {
   approveReimbursement, bulkApprove, createReimbursement,
   deleteReimbursement, fetchReimbursements, markReimbursed, rejectReimbursement,
 } from "@/services/reimbursements-api";
+import { downloadCsv, REIMBURSEMENT_CSV_HEADERS, reimbursementToRow } from "@/lib/export";
 import type { CreateReimbursementPayload, Reimbursement, ReimbursementCategory } from "@/types/reimbursement";
 import { ITC_BLOCKED_CATEGORIES, REIMBURSEMENT_CATEGORY_LABELS } from "@/types/reimbursement";
 
@@ -173,9 +174,14 @@ export default function ReimbursementsPage() {
         title="Reimbursements"
         description="Track out-of-pocket expenses paid by partners and employees — approve and log repayments."
         action={
-          <Button onClick={() => setShowForm((v) => !v)} className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">
-            <Plus size={16} className="mr-2" /> Add Reimbursement
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => downloadCsv(`reimbursements-${new Date().toISOString().slice(0,10)}.csv`, REIMBURSEMENT_CSV_HEADERS, reimbursements.map(reimbursementToRow))}>
+              <Download size={13} /> Export CSV
+            </Button>
+            <Button onClick={() => setShowForm((v) => !v)} className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">
+              <Plus size={16} className="mr-2" /> Add Reimbursement
+            </Button>
+          </div>
         }
       />
 

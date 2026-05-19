@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, FileText, LoaderCircle, Printer, RefreshCw, Trash2 } from "lucide-react";
+import { CheckCircle2, Download, FileText, LoaderCircle, Printer, RefreshCw, Trash2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatCurrency } from "@/services/api";
 import { createPayrollRun, deletePayrollRun, fetchPayrollRunForPeriod, updatePayrollEntryApi, updatePayrollRunStatus } from "@/services/payroll-api";
+import { downloadCsv, PAYROLL_CSV_HEADERS, payrollEntryToRow } from "@/lib/export";
 import type { PayrollEntry, PayrollRun } from "@/types/payroll";
 import { MONTHS_FULL, currentPayrollPeriod, payrollPeriodLabel } from "@/types/payroll";
 import { currentFinancialYear } from "@/types/gst";
@@ -226,6 +227,7 @@ export default function PayrollRegisterPage() {
               <span className={`px-3 py-1.5 rounded-xl text-xs font-bold ${statusCfg.color}`}>{statusCfg.label}</span>
               {run.status === 'draft' && <Button size="sm" className="bg-blue-600 text-white border-0 hover:bg-blue-700" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('approved')}>Approve</Button>}
               {run.status === 'approved' && <Button size="sm" className="bg-success text-white border-0 hover:bg-success/90 gap-1" disabled={statusMutation.isPending} onClick={() => statusMutation.mutate('paid')}><CheckCircle2 size={13} /> Mark Paid</Button>}
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => downloadCsv(`payroll-${run.periodLabel.replace(' ','-')}.csv`, PAYROLL_CSV_HEADERS, (run.entries || []).map(payrollEntryToRow))}><Download size={12} /> CSV</Button>
               {run.status === 'draft' && <Button size="sm" variant="outline" className="gap-1 text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setPendingDelete(true)}><Trash2 size={12} /></Button>}
             </div>
           )}

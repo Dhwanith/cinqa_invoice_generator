@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDownUp, CalendarIcon, Search, X, Trash2, LoaderCircle, TrendingDown } from "lucide-react";
+import { ArrowDownUp, CalendarIcon, Search, X, Trash2, LoaderCircle, TrendingDown, Download } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -14,6 +14,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { fetchPurchaseDetail, fetchPurchases, deletePurchase, updatePurchaseStatus } from "@/services/purchases-api";
+import { downloadCsv, PURCHASE_CSV_HEADERS, purchaseToRow } from "@/lib/export";
 import { formatCurrency, formatDate } from "@/services/api";
 import type { Purchase } from "@/types/purchase";
 import { PURCHASE_CATEGORY_LABELS, computeItcClaimable } from "@/types/purchase";
@@ -127,11 +128,16 @@ export default function PurchasesPage() {
         title="Purchase Register"
         description="All vendor invoices, GST inputs, and ITC tracking in one place."
         action={
-          <Link to="/purchases/new">
-            <Button className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">
-              New Purchase
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => downloadCsv(`purchases-${new Date().toISOString().slice(0,10)}.csv`, PURCHASE_CSV_HEADERS, sorted.map(purchaseToRow))}>
+              <Download size={13} /> Export CSV
             </Button>
-          </Link>
+            <Link to="/purchases/new">
+              <Button className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">
+                New Purchase
+              </Button>
+            </Link>
+          </div>
         }
       />
 

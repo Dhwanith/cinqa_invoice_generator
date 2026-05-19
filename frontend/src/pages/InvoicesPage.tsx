@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDownUp, CalendarIcon, Search, X, FileDown, Eye, LoaderCircle, Trash2 } from "lucide-react";
+import { ArrowDownUp, CalendarIcon, Search, X, FileDown, Eye, LoaderCircle, Trash2, Download } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 import { deleteInvoice, fetchInvoiceDetail, fetchInvoices, formatCurrency, formatDate, updateInvoiceStatus } from "@/services/api";
+import { downloadCsv, INVOICE_CSV_HEADERS, invoiceToRow } from "@/lib/export";
 import type { Invoice } from "@/types/invoice";
 import {
   AlertDialog,
@@ -190,9 +191,14 @@ export default function InvoicesPage() {
         title="Invoices"
         description="Track issued invoices, inspect generated details, and manage delivery status from one place."
         action={
-          <Link to="/invoices/new">
-            <Button className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">New Invoice</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => downloadCsv(`invoices-${new Date().toISOString().slice(0,10)}.csv`, INVOICE_CSV_HEADERS, sortedInvoices.map(invoiceToRow))}>
+              <Download size={13} /> Export CSV
+            </Button>
+            <Link to="/invoices/new">
+              <Button className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all">New Invoice</Button>
+            </Link>
+          </div>
         }
       />
 

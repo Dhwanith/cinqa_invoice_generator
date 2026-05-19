@@ -13,6 +13,7 @@ import { listReimbursements, createReimbursement, updateReimbursementStatus, del
 import { createGstr2bImport, listGstr2bImports, getGstr2bRecords, getBooksOnlyForImport, manualMatchRecord, computeGstr3bData, saveGstr3bReturn, markGstr3bFiled, listGstr3bReturns, getGstSummary } from '../src/repositories/supabase/gst-repository.js';
 import { listAccounts, listJournalEntries, createJournalEntry, deleteJournalEntry, getLatestBankBalance, saveBankBalance, getLatestCapitalEntry, saveCapitalEntry, computeProfitLoss, computeBalanceSheet, computeTrialBalance } from '../src/repositories/supabase/accounting-repository.js';
 import { listEmployees, createEmployee, updateEmployee, getSalaryStructure, upsertSalaryStructure, listPayrollRuns, getPayrollRun, getPayrollRunForPeriod, createPayrollRun, updatePayrollEntry, updatePayrollRunStatus, deletePayrollRun } from '../src/repositories/supabase/payroll-repository.js';
+import { computeDashboardSummary } from '../src/repositories/supabase/dashboard-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
@@ -400,6 +401,18 @@ export function createApp() {
   if (staticDir) app.use(express.static(staticDir));
 
   // ── Public routes ──────────────────────────────────────────────────────────
+
+  app.get('/api/dashboard', handleRoute(async (request, response) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const fyStart = month >= 4 ? year : year - 1;
+    const defaultFrom = `${fyStart}-04-01`;
+    const defaultTo = now.toISOString().slice(0, 10);
+    const dateFrom = validateOptionalString(request.query.dateFrom) || defaultFrom;
+    const dateTo   = validateOptionalString(request.query.dateTo)   || defaultTo;
+    response.json({ ok: true, summary: await computeDashboardSummary({ dateFrom, dateTo }) });
+  }));
 
   app.get('/api/health', async (_request, response) => {
     response.json(await buildHealthPayload());

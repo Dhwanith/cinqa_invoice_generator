@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, AlertCircle } from "lucide-react";
+import { CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { formatCurrency } from "@/services/api";
 import { fetchTrialBalance } from "@/services/accounting-api";
+import { downloadCsv, TRIAL_BALANCE_CSV_HEADERS, trialBalanceLineToRow } from "@/lib/export";
 import { currentFyDateRange, type AccountType } from "@/types/accounting";
 
 const TYPE_ORDER: AccountType[] = ["income", "expense", "asset", "liability", "equity"];
@@ -66,7 +67,13 @@ export default function TrialBalancePage() {
 
   return (
     <div>
-      <PageHeader kicker="Accounting" title="Trial Balance" description="Summarised debit and credit balances for the period — verifies the books are in balance." />
+      <PageHeader kicker="Accounting" title="Trial Balance" description="Summarised debit and credit balances for the period — verifies the books are in balance."
+        action={report ? (
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => downloadCsv(`trial-balance-${queried.dateTo}.csv`, TRIAL_BALANCE_CSV_HEADERS, report.lines.map(trialBalanceLineToRow))}>
+            <Download size={13} /> Export CSV
+          </Button>
+        ) : undefined}
+      />
 
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl border border-border shadow-soft p-5 mb-6">
         <div className="grid sm:grid-cols-[1fr,1fr,auto] gap-4 items-end">

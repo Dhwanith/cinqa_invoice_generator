@@ -1,371 +1,247 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Users, FileText, FilePlus, AlertTriangle, CheckCircle2, ArrowRight, CalendarRange, CalendarIcon } from "lucide-react";
+import {
+  AlertTriangle, ArrowRight, BarChart3, Building2, CheckCircle2,
+  CreditCard, FileText, FilePlus, IndianRupee, Receipt, ShoppingBag,
+  TrendingDown, TrendingUp, Users, Wallet,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
-import { fetchClients, fetchInvoices, formatCurrency, formatDate } from "@/services/api";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { formatCurrency, formatDate } from "@/services/api";
+import { fetchDashboard } from "@/services/dashboard-api";
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.4, ease: "easeOut" as const } }),
-};
+const fadeUp = { hidden: { opacity: 0, y: 12 }, show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.35, ease: "easeOut" as const } }) };
 
-type DashboardFilterMode = "overall" | "fy" | "monthly" | "quarterly" | "date-range";
-
-function isTaxInvoice(invoice: { invoiceType?: "tax" | "proforma" }) {
-  return (invoice.invoiceType ?? "tax") === "tax";
+function KpiCard({ label, value, sub, icon: Icon, trend, color, to, index }: { label: string; value: string; sub?: string; icon: React.ElementType; trend?: 'up' | 'down' | 'neutral'; color?: string; to?: string; index: number }) {
+  const card = (
+    <motion.div custom={index} initial="hidden" animate="show" variants={fadeUp}
+      className={`bg-card rounded-2xl border border-border p-5 shadow-soft ${to ? 'hover:shadow-elevated hover:-translate-y-0.5 transition-all cursor-pointer' : ''}`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</span>
+        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${color || 'bg-primary/10'}`}>
+          <Icon size={15} className={color ? 'text-white' : 'text-primary'} />
+        </div>
+      </div>
+      <p className="text-2xl font-black tracking-tight">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    </motion.div>
+  );
+  return to ? <Link to={to}>{card}</Link> : card;
 }
 
-function getDateValue(value: string) {
-  const timestamp = new Date(value).getTime();
-  return Number.isNaN(timestamp) ? 0 : timestamp;
+function AlertCard({ icon: Icon, message, sub, to, color }: { icon: React.ElementType; message: string; sub?: string; to: string; color: string }) {
+  return (
+    <Link to={to} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${color} hover:shadow-soft transition-all`}>
+      <Icon size={16} className="shrink-0 mt-0.5" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">{message}</p>
+        {sub && <p className="text-xs opacity-70 mt-0.5">{sub}</p>}
+      </div>
+      <ArrowRight size={14} className="shrink-0 mt-0.5 opacity-50" />
+    </Link>
+  );
 }
 
-function getFinancialYearLabel(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
-  const startYear = month >= 3 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `${String(startYear).slice(-2)}-${String(endYear).slice(-2)}`;
-}
-
-function getFinancialQuarter(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Q1";
-  }
-
-  const month = date.getUTCMonth();
-  if (month >= 3 && month <= 5) return "Q1";
-  if (month >= 6 && month <= 8) return "Q2";
-  if (month >= 9 && month <= 11) return "Q3";
-  return "Q4";
-}
-
-function getMonthValue(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function getDefaultFromDate(invoices: Array<{ invoiceDate: string }>) {
-  const sorted = [...invoices].sort((left, right) => getDateValue(right.invoiceDate) - getDateValue(left.invoiceDate));
-  return sorted[0]?.invoiceDate?.slice(0, 10) || new Date().toISOString().slice(0, 10);
-}
+type PeriodMode = 'mtd' | 'ytd' | 'fy';
 
 export default function Dashboard() {
-  const [filterMode, setFilterMode] = useState<DashboardFilterMode>("overall");
-  const { data: clients = [], isLoading: clientsLoading } = useQuery({
-    queryKey: ["clients", "dashboard"],
-    queryFn: () => fetchClients({ active: "all" }),
+  const [periodMode, setPeriodMode] = useState<PeriodMode>('ytd');
+
+  const periodParams = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth() + 1;
+    const today = now.toISOString().slice(0, 10);
+    const fyStart = m >= 4 ? y : y - 1;
+    switch (periodMode) {
+      case 'mtd': return { dateFrom: `${y}-${String(m).padStart(2, '0')}-01`, dateTo: today };
+      case 'ytd': return { dateFrom: `${fyStart}-04-01`, dateTo: today };
+      case 'fy':  return { dateFrom: `${fyStart}-04-01`, dateTo: `${fyStart + 1}-03-31` };
+    }
+  }, [periodMode]);
+
+  const { data: summary, isLoading } = useQuery({
+    queryKey: ['dashboard', periodParams.dateFrom, periodParams.dateTo],
+    queryFn: () => fetchDashboard(periodParams),
+    staleTime: 60_000,
   });
 
-  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
-    queryKey: ["invoices", "dashboard"],
-    queryFn: () => fetchInvoices({ status: "all" }),
-  });
+  const s = summary;
 
-  const fyOptions = useMemo(
-    () => [...new Set(invoices.map((invoice) => getFinancialYearLabel(invoice.invoiceDate)).filter((value) => value !== "Unknown"))].sort().reverse(),
-    [invoices]
-  );
-  const monthOptions = useMemo(
-    () => [...new Set(invoices.map((invoice) => getMonthValue(invoice.invoiceDate)).filter(Boolean))].sort().reverse(),
-    [invoices]
-  );
-  const [selectedFy, setSelectedFy] = useState<string>("");
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [selectedQuarterFy, setSelectedQuarterFy] = useState<string>("");
-  const [selectedQuarter, setSelectedQuarter] = useState<string>("Q1");
-  const [rangeStart, setRangeStart] = useState<string>("");
-  const [rangeEnd, setRangeEnd] = useState<string>("");
-  const [dateFromOpen, setDateFromOpen] = useState(false);
-  const [dateToOpen, setDateToOpen] = useState(false);
+  const alerts = useMemo(() => {
+    if (!s) return [];
+    const list = [];
+    if (s.counts.unpaidInvoices > 0) list.push({ key: 'ar', icon: FileText, message: `${s.counts.unpaidInvoices} invoice${s.counts.unpaidInvoices > 1 ? 's' : ''} awaiting payment`, sub: formatCurrency(s.outstandingAR), to: '/invoices', color: 'bg-amber-500/8 border-amber-500/30 text-amber-700' });
+    if (s.counts.pendingReimbs > 0) list.push({ key: 'reimb', icon: Wallet, message: `${s.counts.pendingReimbs} reimbursement${s.counts.pendingReimbs > 1 ? 's' : ''} pending approval`, sub: formatCurrency(s.pendingReimbursements), to: '/reimbursements', color: 'bg-primary/8 border-primary/30 text-primary' });
+    if (s.counts.unpaidPurchases > 0) list.push({ key: 'ap', icon: Receipt, message: `${s.counts.unpaidPurchases} purchase${s.counts.unpaidPurchases > 1 ? 's' : ''} unpaid`, sub: formatCurrency(s.outstandingAP), to: '/purchases', color: 'bg-blue-500/8 border-blue-500/30 text-blue-700' });
+    if (s.latestGstr3b && s.latestGstr3b.status !== 'filed') list.push({ key: 'gst', icon: AlertTriangle, message: `GSTR-3B for ${s.latestGstr3b.periodLabel} not yet filed`, sub: s.gstPayable !== null ? `Net payable: ${formatCurrency(s.gstPayable)}` : undefined, to: '/gst/gstr3b', color: 'bg-destructive/8 border-destructive/30 text-destructive' });
+    return list;
+  }, [s]);
 
-  const effectiveFy = selectedFy || fyOptions[0] || "";
-  const effectiveMonth = selectedMonth || monthOptions[0] || "";
-  const effectiveQuarterFy = selectedQuarterFy || fyOptions[0] || "";
-  const effectiveRangeStart = rangeStart || getDefaultFromDate(invoices);
-  const effectiveRangeEnd = rangeEnd || new Date().toISOString().slice(0, 10);
-
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter((invoice) => {
-      const invoiceDate = invoice.invoiceDate?.slice(0, 10);
-
-      switch (filterMode) {
-        case "fy":
-          return getFinancialYearLabel(invoice.invoiceDate) === effectiveFy;
-        case "monthly":
-          return getMonthValue(invoice.invoiceDate) === effectiveMonth;
-        case "quarterly":
-          return getFinancialYearLabel(invoice.invoiceDate) === effectiveQuarterFy && getFinancialQuarter(invoice.invoiceDate) === selectedQuarter;
-        case "date-range":
-          return invoiceDate >= effectiveRangeStart && invoiceDate <= effectiveRangeEnd;
-        case "overall":
-        default:
-          return true;
-      }
-    });
-  }, [invoices, filterMode, effectiveFy, effectiveMonth, effectiveQuarterFy, selectedQuarter, effectiveRangeStart, effectiveRangeEnd]);
-
-  const recentInvoices = useMemo(
-    () => [...filteredInvoices].sort((left, right) => getDateValue(right.invoiceDate) - getDateValue(left.invoiceDate)).slice(0, 5),
-    [filteredInvoices]
-  );
-  const isLoading = clientsLoading || invoicesLoading;
-
-  const activeClients = clients.filter((c) => c.active).length;
-  const totalRevenue = filteredInvoices.filter(isTaxInvoice).reduce((s, i) => s + i.total, 0);
-  const paidInvoices = filteredInvoices.filter((i) => i.status === "paid").length;
-  const pendingInvoices = filteredInvoices.filter((i) => i.status !== "paid").length;
-
-  const stats = [
-    { label: "Active Clients", value: activeClients, icon: Users, color: "text-primary" },
-    { label: "Total Invoiced", value: formatCurrency(totalRevenue), icon: FileText, color: "text-foreground" },
-    { label: "Paid", value: paidInvoices, icon: CheckCircle2, color: "text-success" },
-    { label: "Pending", value: pendingInvoices, icon: AlertTriangle, color: "text-primary" },
+  const quickActions = [
+    { label: 'New Invoice',       icon: FilePlus,    to: '/invoices/new',      color: 'gradient-warm' },
+    { label: 'New Purchase',      icon: ShoppingBag, to: '/purchases/new',     color: 'bg-blue-600 hover:bg-blue-700' },
+    { label: 'Reimbursement',     icon: Wallet,      to: '/reimbursements',    color: 'bg-amber-600 hover:bg-amber-700' },
+    { label: 'Payroll Register',  icon: CreditCard,  to: '/payroll/register',  color: 'bg-purple-600 hover:bg-purple-700' },
+    { label: 'GSTR-3B',          icon: BarChart3,   to: '/gst/gstr3b',        color: 'bg-emerald-600 hover:bg-emerald-700' },
   ];
 
   return (
     <div>
       <PageHeader
         kicker="Internal Ops Desk"
-        title="Invoice Desk"
-        description="Register clients, generate invoices, and manage your billing — all in one place."
+        title="Dashboard"
+        description="Financial command centre — revenue, expenses, outstanding amounts, and action items at a glance."
         action={
-          <Link to="/invoices/new" className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl gradient-warm text-primary-foreground font-semibold text-sm shadow-soft hover:shadow-elevated transition-all duration-200 hover:-translate-y-0.5">
-            <FilePlus size={16} /> New Invoice
-          </Link>
+          <div className="flex gap-1.5 bg-muted rounded-xl p-1">
+            {(['mtd', 'ytd', 'fy'] as PeriodMode[]).map((mode) => (
+              <button key={mode} onClick={() => setPeriodMode(mode)} className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wide transition-all ${periodMode === mode ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                {mode === 'mtd' ? 'Month' : mode === 'ytd' ? 'FY YTD' : 'Full FY'}
+              </button>
+            ))}
+          </div>
         }
       />
 
-      <motion.div custom={0} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft p-5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <CalendarRange size={16} className="text-primary" />
-          <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground">Dashboard Filters</h3>
-        </div>
-        <div className="grid md:grid-cols-[180px,1fr] gap-4 items-start">
-          <div>
-            <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">View</label>
-            <Select value={filterMode} onValueChange={(v) => setFilterMode(v as DashboardFilterMode)}>
-              <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="overall">Overall</SelectItem>
-                <SelectItem value="fy">Financial Year</SelectItem>
-                <SelectItem value="monthly">Monthly</SelectItem>
-                <SelectItem value="quarterly">Quarterly</SelectItem>
-                <SelectItem value="date-range">Date Range</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Financial KPIs — Row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <KpiCard index={0} label="Revenue" icon={TrendingUp} value={isLoading ? '…' : formatCurrency(s?.revenue || 0)} sub={`${s?.counts.invoiceCount || 0} invoices`} color="bg-success" to="/invoices" />
+        <KpiCard index={1} label="Expenses" icon={TrendingDown} value={isLoading ? '…' : formatCurrency(s?.totalExpenses || 0)} sub={`Purchases + Reimbursements`} color="bg-primary" to="/purchases" />
+        <KpiCard index={2} label="Net Profit" icon={IndianRupee} value={isLoading ? '…' : formatCurrency(s?.netProfit || 0)} sub={s ? (s.netProfit >= 0 ? 'Profitable period' : 'Loss period') : ''} />
+        <KpiCard index={3} label="Bank Balance" icon={Building2} value={isLoading ? '…' : s?.bankBalance !== null && s?.bankBalance !== undefined ? formatCurrency(s.bankBalance) : 'Not set'} sub={s?.bankDate ? `as of ${formatDate(s.bankDate)}` : 'Click to update'} to="/accounting/balance-sheet" />
+      </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filterMode === "fy" && (
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Financial Year</label>
-                <Select value={effectiveFy} onValueChange={setSelectedFy}>
-                  <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fyOptions.map((option) => (
-                      <SelectItem key={option} value={option}>{option}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      {/* Balance Sheet KPIs — Row 2 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KpiCard index={4} label="Accounts Receivable" icon={FileText} value={isLoading ? '…' : formatCurrency(s?.outstandingAR || 0)} sub={`${s?.counts.unpaidInvoices || 0} unpaid invoices`} to="/invoices" />
+        <KpiCard index={5} label="Accounts Payable" icon={Receipt} value={isLoading ? '…' : formatCurrency(s?.outstandingAP || 0)} sub={`${s?.counts.unpaidPurchases || 0} unpaid purchases`} to="/purchases" />
+        <KpiCard index={6} label="ITC Balance" icon={BarChart3} value={isLoading ? '…' : formatCurrency(s?.itcBalance || 0)} sub="Claimable input tax credit" to="/gst/gstr3b" />
+        <KpiCard index={7} label="GST Payable" icon={AlertTriangle} value={isLoading ? '…' : s?.gstPayable !== null && s?.gstPayable !== undefined ? formatCurrency(s.gstPayable) : 'Not computed'} sub={s?.latestGstr3b?.periodLabel ? `${s.latestGstr3b.periodLabel} · ${s.latestGstr3b.status}` : 'Compute GSTR-3B'} to="/gst/gstr3b" />
+      </div>
+
+      <div className="grid lg:grid-cols-[1fr,340px] gap-6">
+        <div className="space-y-6">
+
+          {/* Action Required */}
+          {alerts.length > 0 && (
+            <motion.div custom={8} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <AlertTriangle size={15} className="text-amber-600" />
+                <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground">Action Required</h3>
               </div>
-            )}
-
-            {filterMode === "monthly" && (
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Month</label>
-                <Select value={effectiveMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {monthOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {new Date(`${option}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                {alerts.map((alert) => <AlertCard key={alert.key} {...alert} />)}
+                {alerts.length === 0 && <p className="text-sm text-muted-foreground">All clear — no pending actions.</p>}
               </div>
-            )}
+            </motion.div>
+          )}
 
-            {filterMode === "quarterly" && (
-              <>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Financial Year</label>
-                  <Select value={effectiveQuarterFy} onValueChange={setSelectedQuarterFy}>
-                    <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fyOptions.map((option) => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">Quarter</label>
-                  <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
-                    <SelectTrigger className="w-full rounded-xl h-[46px] px-4 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Q1">Q1 (Apr–Jun)</SelectItem>
-                      <SelectItem value="Q2">Q2 (Jul–Sep)</SelectItem>
-                      <SelectItem value="Q3">Q3 (Oct–Dec)</SelectItem>
-                      <SelectItem value="Q4">Q4 (Jan–Mar)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
-
-            {filterMode === "date-range" && (
-              <>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">From</label>
-                  <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
-                    <PopoverTrigger asChild>
-                      <button type="button" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring">
-                        <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
-                        {effectiveRangeStart ? format(new Date(effectiveRangeStart + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={effectiveRangeStart ? new Date(effectiveRangeStart + "T00:00:00") : undefined}
-                        onSelect={(date) => {
-                          if (date) {
-                            setRangeStart(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
-                            setDateFromOpen(false);
-                          }
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">To</label>
-                  <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
-                    <PopoverTrigger asChild>
-                      <button type="button" className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring">
-                        <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
-                        {effectiveRangeEnd ? format(new Date(effectiveRangeEnd + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={effectiveRangeEnd ? new Date(effectiveRangeEnd + "T00:00:00") : undefined}
-                        onSelect={(date) => {
-                          if (date) {
-                            setRangeEnd(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`);
-                            setDateToOpen(false);
-                          }
-                        }}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </>
-            )}
-
-            {filterMode === "overall" && (
-              <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                Showing all invoices across the full available period.
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat, i) => (
-          <motion.div key={stat.label} custom={i} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl p-5 border border-border shadow-soft">
-            <div className="flex items-center gap-2 mb-3">
-              <stat.icon size={16} className={stat.color} />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{stat.label}</span>
+          {/* Recent Invoices */}
+          <motion.div custom={9} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft">
+            <div className="flex items-center justify-between p-5 pb-3">
+              <div className="flex items-center gap-2"><FileText size={15} className="text-primary" /><h3 className="text-sm font-bold">Recent Invoices</h3></div>
+              <Link to="/invoices" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">View all <ArrowRight size={11} /></Link>
             </div>
-            <p className="text-2xl font-bold tracking-tight">{stat.value}</p>
+            <div className="divide-y divide-border">
+              {isLoading && <div className="px-5 py-4 text-sm text-muted-foreground">Loading…</div>}
+              {!isLoading && (s?.recent.invoices || []).length === 0 && <div className="px-5 py-4 text-sm text-muted-foreground">No recent invoices.</div>}
+              {(s?.recent.invoices || []).map((inv) => (
+                <div key={inv.id} className="flex items-center justify-between px-5 py-3.5">
+                  <div>
+                    <p className="text-sm font-semibold">{inv.invoiceNo}</p>
+                    <p className="text-xs text-muted-foreground">{inv.clientName} · {formatDate(inv.invoiceDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold">{formatCurrency(inv.total)}</span>
+                    <StatusBadge status={inv.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
           </motion.div>
-        ))}
-      </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Invoices */}
-        <motion.div custom={4} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft">
-          <div className="flex items-center justify-between p-5 pb-3">
-            <h3 className="text-lg font-bold">Recent Invoices</h3>
-            <Link to="/invoices" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-              View all <ArrowRight size={12} />
-            </Link>
-          </div>
-          <div className="divide-y divide-border">
-            {!recentInvoices.length && <div className="px-5 py-6 text-sm text-muted-foreground">No invoices found for the selected filter.</div>}
-            {recentInvoices.map((inv) => (
-              <div key={inv.id} className="flex items-center justify-between px-5 py-3.5">
-                <div>
-                  <p className="text-sm font-semibold">{inv.invoiceNo}</p>
-                  <p className="text-xs text-muted-foreground">{inv.clientName} · {formatDate(inv.invoiceDate)}</p>
+          {/* Recent Purchases */}
+          <motion.div custom={10} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft">
+            <div className="flex items-center justify-between p-5 pb-3">
+              <div className="flex items-center gap-2"><Receipt size={15} className="text-blue-600" /><h3 className="text-sm font-bold">Recent Purchases</h3></div>
+              <Link to="/purchases" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">View all <ArrowRight size={11} /></Link>
+            </div>
+            <div className="divide-y divide-border">
+              {!isLoading && (s?.recent.purchases || []).length === 0 && <div className="px-5 py-4 text-sm text-muted-foreground">No recent purchases.</div>}
+              {(s?.recent.purchases || []).map((p) => (
+                <div key={p.id} className="flex items-center justify-between px-5 py-3.5">
+                  <div>
+                    <p className="text-sm font-semibold">{p.vendorName}</p>
+                    <p className="text-xs text-muted-foreground">{p.purchaseNumber || p.category} · {formatDate(p.purchaseDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-bold">{formatCurrency(p.total)}</span>
+                    <StatusBadge status={p.status} />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold">{formatCurrency(inv.total)}</span>
-                  <StatusBadge status={inv.status || "generated"} />
-                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-5">
+
+          {/* Quick Actions */}
+          <motion.div custom={8} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft p-5">
+            <h3 className="text-sm font-bold mb-4">Quick Actions</h3>
+            <div className="space-y-2">
+              {quickActions.map(({ label, icon: Icon, to, color }) => (
+                <Link key={to} to={to} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:-translate-y-0.5 hover:shadow-soft ${color}`}>
+                  <Icon size={15} />{label}
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Pending Reimbursements */}
+          {(s?.recent.pendingReimbs || []).length > 0 && (
+            <motion.div custom={11} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft">
+              <div className="flex items-center justify-between p-4 pb-2">
+                <div className="flex items-center gap-2"><Wallet size={14} className="text-primary" /><p className="text-sm font-bold">Pending Reimbursements</p></div>
+                <Link to="/reimbursements" className="text-xs font-semibold text-primary hover:underline">Approve all</Link>
               </div>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Clients */}
-        <motion.div custom={5} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft">
-          <div className="flex items-center justify-between p-5 pb-3">
-            <h3 className="text-lg font-bold">Clients</h3>
-            <Link to="/clients" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-              Manage <ArrowRight size={12} />
-            </Link>
-          </div>
-          <div className="divide-y divide-border">
-            {clients.map((client) => (
-              <div key={client.id} className="flex items-center justify-between px-5 py-3.5">
-                <div>
-                  <p className="text-sm font-semibold">{client.name}</p>
-                  <p className="text-xs text-muted-foreground">{client.gstin} · {client.state}</p>
-                </div>
-                <StatusBadge status={client.active ? "active" : "inactive"} />
+              <div className="divide-y divide-border">
+                {(s?.recent.pendingReimbs || []).map((r) => (
+                  <div key={r.id} className="flex items-center justify-between px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{r.paidBy}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">{r.description}</p>
+                    </div>
+                    <span className="text-sm font-bold ml-3">{formatCurrency(r.amount)}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
+            </motion.div>
+          )}
 
-      {isLoading && <p className="text-sm text-muted-foreground mt-6">Loading live data…</p>}
+          {/* Module summary */}
+          <motion.div custom={12} initial="hidden" animate="show" variants={fadeUp} className="bg-card rounded-2xl border border-border shadow-soft p-5">
+            <h3 className="text-sm font-bold mb-4">Platform</h3>
+            <div className="space-y-3">
+              {[
+                { icon: Users, label: 'Active Employees', value: s?.counts.activeEmployees || 0, to: '/payroll/employees' },
+                { icon: FileText, label: 'Invoices (period)', value: s?.counts.invoiceCount || 0, to: '/invoices' },
+                { icon: Receipt, label: 'Unpaid Purchases', value: s?.counts.unpaidPurchases || 0, to: '/purchases' },
+              ].map(({ icon: Icon, label, value, to }) => (
+                <Link key={to} to={to} className="flex items-center justify-between p-3 rounded-xl hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center"><Icon size={13} className="text-muted-foreground" /></div>
+                    <span className="text-sm text-muted-foreground">{label}</span>
+                  </div>
+                  <span className="text-sm font-bold">{value}</span>
+                </Link>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -12,9 +12,15 @@ import InvoicesPage from "@/pages/InvoicesPage";
 import CreateInvoicePage from "@/pages/CreateInvoicePage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/NotFound";
-import { fetchAuthSession, loginApp, logoutApp } from "@/services/api";
+import { getSupabase } from "@/lib/supabase";
 
 const queryClient = new QueryClient();
+
+interface AuthState {
+  loading: boolean;
+  authenticated: boolean;
+  email: string;
+}
 
 const sessionLoadingQuotes = [
   "Aligning ledgers and planets.",
@@ -28,11 +34,11 @@ function SessionLoadingScreen() {
   const [quoteIndex, setQuoteIndex] = useState(0);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setQuoteIndex((current) => (current + 1) % sessionLoadingQuotes.length);
-    }, 1800);
-
-    return () => window.clearInterval(intervalId);
+    const id = window.setInterval(
+      () => setQuoteIndex((i) => (i + 1) % sessionLoadingQuotes.length),
+      1800
+    );
+    return () => window.clearInterval(id);
   }, []);
 
   return (
@@ -45,70 +51,91 @@ function SessionLoadingScreen() {
         </div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-primary mb-2">Secure Access</p>
         <h1 className="font-brand text-3xl font-bold tracking-tight mb-3">Checking Session</h1>
-        <p className="text-sm text-muted-foreground min-h-[20px] transition-all duration-300">{sessionLoadingQuotes[quoteIndex]}</p>
+        <p className="text-sm text-muted-foreground min-h-[20px] transition-all duration-300">
+          {sessionLoadingQuotes[quoteIndex]}
+        </p>
       </div>
     </div>
   );
 }
 
 function AuthenticatedApp() {
-  const queryClient = useQueryClient();
-  const authSessionQuery = useQuery({
-    queryKey: ["auth", "session"],
-    queryFn: fetchAuthSession,
-    retry: false,
-    staleTime: 60_000,
-  });
-
-  const loginMutation = useMutation({
-    mutationFn: loginApp,
-    onSuccess: (session) => {
-      queryClient.setQueryData(["auth", "session"], session);
-      toast.success(`Signed in as ${session.username}.`);
-    },
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: logoutApp,
-    onSuccess: (session) => {
-      queryClient.setQueryData(["auth", "session"], session);
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== "auth" });
-      toast.success("Signed out.");
-    },
-  });
+  const qc = useQueryClient();
+  const [auth, setAuth] = useState<AuthState>({ loading: true, authenticated: false, email: "" });
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const subRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   useEffect(() => {
-    const handleAuthExpired = () => {
-      queryClient.invalidateQueries({ queryKey: ["auth", "session"] });
-      toast.error("Your session expired. Please sign in again.");
+    let cancelled = false;
+
+    getSupabase()
+      .then((supabase) => {
+        if (cancelled) return;
+
+        // Resolve current session immediately (avoids a flash of login screen)
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (cancelled) return;
+          setAuth({ loading: false, authenticated: Boolean(session), email: session?.user?.email ?? "" });
+        });
+
+        // Keep auth state in sync with Supabase session lifecycle
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          setAuth({ loading: false, authenticated: Boolean(session), email: session?.user?.email ?? "" });
+          if (!session) {
+            qc.removeQueries({ predicate: (q) => q.queryKey[0] !== "auth" });
+          }
+        });
+
+        subRef.current = subscription;
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuth({ loading: false, authenticated: false, email: "" });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      subRef.current?.unsubscribe();
     };
+  }, [qc]);
 
-    window.addEventListener("app-auth-expired", handleAuthExpired);
-    return () => window.removeEventListener("app-auth-expired", handleAuthExpired);
-  }, [queryClient]);
+  // Re-check session when the auth-expired event fires (e.g. 401 from API)
+  useEffect(() => {
+    const handler = async () => {
+      const supabase = await getSupabase();
+      await supabase.auth.refreshSession();
+    };
+    window.addEventListener("app-auth-expired", handler);
+    return () => window.removeEventListener("app-auth-expired", handler);
+  }, []);
 
-  if (authSessionQuery.isLoading) {
-    return <SessionLoadingScreen />;
-  }
+  const handleLogin = async (credentials: { email: string; password: string }) => {
+    const supabase = await getSupabase();
+    const { error } = await supabase.auth.signInWithPassword(credentials);
+    if (error) throw new Error(error.message);
+    toast.success("Signed in successfully.");
+  };
 
-  if (!authSessionQuery.data?.authenticated) {
-    return (
-      <LoginPage
-        configured={Boolean(authSessionQuery.data?.configured)}
-        isSubmitting={loginMutation.isPending}
-        onLogin={async (credentials) => {
-          await loginMutation.mutateAsync(credentials);
-        }}
-      />
-    );
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const supabase = await getSupabase();
+      await supabase.auth.signOut();
+      toast.success("Signed out.");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  if (auth.loading) return <SessionLoadingScreen />;
+
+  if (!auth.authenticated) {
+    return <LoginPage isSubmitting={false} onLogin={handleLogin} />;
   }
 
   return (
-    <AppLayout
-      username={authSessionQuery.data.username}
-      onLogout={() => logoutMutation.mutate()}
-      isLoggingOut={logoutMutation.isPending}
-    >
+    <AppLayout username={auth.email} onLogout={handleLogout} isLoggingOut={isLoggingOut}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/clients" element={<ClientsPage />} />

@@ -7,7 +7,10 @@
       "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('app-server imports ok'\\)\\).catch\\(e => console.error\\('ERROR:', e.message\\)\\)\")",
       "Bash(npm install *)",
       "Bash(node --input-type=module --eval ' *)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\)\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\)\\)\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

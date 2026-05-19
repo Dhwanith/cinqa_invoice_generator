@@ -1,4 +1,5 @@
 import type { Client, Invoice, HealthData, LineItem } from "@/types/invoice";
+import { getSupabase } from "@/lib/supabase";
 
 const API_BASE = "/api";
 
@@ -47,8 +48,27 @@ export interface ConvertProformaToTaxInvoicePayload {
   invoiceDate?: string;
 }
 
+async function getAuthHeader(): Promise<string | null> {
+  try {
+    const supabase = await getSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? `Bearer ${session.access_token}` : null;
+  } catch {
+    return null;
+  }
+}
+
 async function requestJson<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, options);
+  const authHeader = await getAuthHeader();
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
+  });
+
   const data = (await response.json()) as ApiEnvelope<T>;
   if (response.status === 401) {
     window.dispatchEvent(new CustomEvent("app-auth-expired"));

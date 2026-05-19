@@ -46,7 +46,7 @@ function buildHealthWarnings() {
   const warnings = [];
   if (!hasEnv('SUPABASE_URL')) warnings.push('SUPABASE_URL is missing.');
   if (!hasEnv('SUPABASE_SERVICE_ROLE_KEY')) warnings.push('SUPABASE_SERVICE_ROLE_KEY is missing.');
-  if (!isAppAuthConfigured()) warnings.push('APP_AUTH_USERNAME, APP_AUTH_PASSWORD, or APP_SESSION_SECRET is missing.');
+  if (!hasEnv('SUPABASE_ANON_KEY')) warnings.push('SUPABASE_ANON_KEY is missing — frontend auth will not work.');
   return warnings;
 }
 
@@ -54,15 +54,16 @@ function buildHealthPayload() {
   return {
     ok: true,
     appName: 'Cinqa Invoice Desk',
-    appAuthConfigured: isAppAuthConfigured(),
     companyStateCode: Number(getEnv('COMPANY_STATE_CODE', '24')),
     defaultSac: getEnv('DEFAULT_SAC', '998314'),
     paymentTermsDays: Number(getEnv('PAYMENT_TERMS_DAYS', '10')),
     supabaseConfigured: hasEnv('SUPABASE_URL') && hasEnv('SUPABASE_SERVICE_ROLE_KEY'),
+    authConfigured: hasEnv('SUPABASE_ANON_KEY'),
     config: {
       supabase: {
         hasUrl: hasEnv('SUPABASE_URL'),
         hasServiceKey: hasEnv('SUPABASE_SERVICE_ROLE_KEY'),
+        hasAnonKey: hasEnv('SUPABASE_ANON_KEY'),
         orgId: getEnv('SUPABASE_DEFAULT_ORG_ID', '00000000-0000-0000-0000-000000000001')
       }
     },
@@ -184,20 +185,33 @@ function constantTimeEqual(left, right) {
   return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function requireAuthenticatedApp(request, response, next) {
-  if (!isAppAuthConfigured()) {
-    response.status(503).json({ ok: false, error: 'App authentication is not configured.' });
-    return;
+async function requireAuthenticatedApp(request, response, next) {
+  // ── Path 1: Supabase Auth JWT (Authorization: Bearer <token>) ─────────────
+  const authHeader = request.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const supabase = getSupabaseClient();
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+      if (user && !error) {
+        request.authUser = { id: user.id, email: user.email };
+        return next();
+      }
+    } catch {
+      // Fall through to HMAC session
+    }
   }
 
-  const session = getAuthSession(request);
-  if (!session) {
-    response.status(401).json({ ok: false, error: 'Authentication required.' });
-    return;
+  // ── Path 2: Custom HMAC session cookie (backward-compat / operator access) ─
+  if (isAppAuthConfigured()) {
+    const session = getAuthSession(request);
+    if (session) {
+      request.authSession = session;
+      return next();
+    }
   }
 
-  request.authSession = session;
-  next();
+  response.status(401).json({ ok: false, error: 'Authentication required.' });
 }
 
 // ── HTTP request validation ───────────────────────────────────────────────────
@@ -327,6 +341,14 @@ export function createApp() {
 
   app.get('/api/health', (_request, response) => {
     response.json(buildHealthPayload());
+  });
+
+  // Public: frontend reads this to initialise the Supabase client without build-time env vars
+  app.get('/api/config', (_request, response) => {
+    response.json({
+      supabaseUrl: getEnv('SUPABASE_URL'),
+      supabaseAnonKey: getEnv('SUPABASE_ANON_KEY')
+    });
   });
 
   app.get('/api/auth/session', (request, response) => {

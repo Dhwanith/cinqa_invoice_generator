@@ -47,7 +47,7 @@ export default function CreateInvoicePage() {
   const [showQuantity, setShowQuantity] = useState(false);
   const [includeDueDate, setIncludeDueDate] = useState(true);
   const [lineItems, setLineItems] = useState<LineItem[]>([
-    { description: "AI-based Marketing Image Generation Services", sac: "998314", amount: 300000, quantity: 1, unitPrice: 300000 },
+    { description: "", sac: "", amount: 0, quantity: null, unitPrice: null },
   ]);
   const [submittedInvoice, setSubmittedInvoice] = useState<CreateInvoiceResult | null>(null);
 
@@ -97,8 +97,8 @@ export default function CreateInvoicePage() {
     setLineItems((current) =>
       current.map((item) => ({
         ...item,
-        quantity: item.quantity ?? 1,
-        unitPrice: item.unitPrice ?? item.amount,
+        quantity: item.quantity ?? null,
+        unitPrice: item.unitPrice ?? null,
       }))
     );
   }, [showQuantity]);
@@ -162,13 +162,7 @@ export default function CreateInvoicePage() {
   const addLineItem = () => {
     setLineItems((current) => [
       ...current,
-      {
-        description: "",
-        sac: invoiceType === "tax" ? selectedClient?.defaultSac || "998314" : "",
-        amount: 0,
-        quantity: 1,
-        unitPrice: null,
-      },
+      { description: "", sac: "", amount: 0, quantity: null, unitPrice: null },
     ]);
   };
 
@@ -357,13 +351,13 @@ export default function CreateInvoicePage() {
                     {showQuantity && (
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-muted-foreground">Qty</label>
-                        <Input type="number" min={0} step="any" value={item.quantity ?? 1} onChange={(e) => updateLineItem(index, "quantity", e.target.value)} placeholder="1" required />
+                        <Input type="number" min={0} step="any" value={item.quantity ?? ""} onChange={(e) => updateLineItem(index, "quantity", e.target.value)} placeholder="e.g. 2" required />
                       </div>
                     )}
                     {showQuantity && (
                       <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-muted-foreground">Unit Price</label>
-                        <Input type="number" min={0} step="any" value={item.unitPrice ?? item.amount} onChange={(e) => updateLineItem(index, "unitPrice", e.target.value)} placeholder="0" required />
+                        <Input type="number" min={0} step="any" value={item.unitPrice ?? ""} onChange={(e) => updateLineItem(index, "unitPrice", e.target.value)} placeholder="e.g. 5000" required />
                       </div>
                     )}
                     <div className="space-y-1.5">
@@ -373,7 +367,7 @@ export default function CreateInvoicePage() {
                           {formatCurrency(getLineItemAmount(item, showQuantity))}
                         </div>
                       ) : (
-                        <Input type="number" min={0} step="any" value={item.amount} onChange={(e) => updateLineItem(index, "amount", e.target.value)} placeholder="0" required />
+                        <Input type="number" min={0} step="any" value={item.amount || ""} onChange={(e) => updateLineItem(index, "amount", e.target.value)} placeholder="e.g. 100000" required />
                       )}
                     </div>
                     <Button type="button" variant="ghost" size="icon" onClick={() => removeLineItem(index)} disabled={lineItems.length === 1} className="rounded-xl text-muted-foreground hover:text-destructive mt-[22px]">

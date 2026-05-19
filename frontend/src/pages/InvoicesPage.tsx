@@ -39,10 +39,21 @@ import { convertProformaToTaxInvoice } from "@/services/api";
 type InvoiceSortOption = "newest" | "oldest" | "amount-high" | "amount-low" | "invoice-asc" | "invoice-desc" | "client-asc" | "client-desc";
 
 const STATUS_TRIGGER_CLASSES: Record<string, string> = {
-  pending: "border-amber-500 text-amber-600 bg-amber-500/5",
-  sent: "border-primary text-primary bg-primary/5",
-  paid: "border-success text-success bg-success/5",
-  cancelled: "border-destructive text-destructive bg-destructive/5",
+  pending:        "border-amber-500 text-amber-600 bg-amber-500/5",
+  sent:           "border-primary text-primary bg-primary/5",
+  partially_paid: "border-orange-500 text-orange-600 bg-orange-500/5",
+  paid:           "border-success text-success bg-success/5",
+  cancelled:      "border-destructive text-destructive bg-destructive/5",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  all:            "All",
+  generated:      "Generated",
+  pending:        "Pending",
+  sent:           "Sent",
+  partially_paid: "Partially Paid",
+  paid:           "Paid",
+  cancelled:      "Cancelled",
 };
 
 export default function InvoicesPage() {
@@ -367,9 +378,9 @@ export default function InvoicesPage() {
           </SelectContent>
         </Select>
         <div className="flex gap-1.5 bg-muted rounded-xl p-1 overflow-x-auto">
-          {(["all", "generated", "pending", "sent", "paid", "cancelled"] as const).map((option) => (
-            <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              {option}
+          {(["all", "generated", "pending", "sent", "partially_paid", "paid", "cancelled"] as const).map((option) => (
+            <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {STATUS_LABELS[option] ?? option}
             </button>
           ))}
         </div>
@@ -470,6 +481,7 @@ export default function InvoicesPage() {
                     <SelectItem value="generated">Generated</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
@@ -529,6 +541,7 @@ export default function InvoicesPage() {
                     <SelectItem value="generated">Generated</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>

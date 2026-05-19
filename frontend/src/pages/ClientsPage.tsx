@@ -145,7 +145,13 @@ export default function ClientsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">State Code</label>
-                  <Input value={formState.stateCode} onChange={(e) => updateField("stateCode", Number(e.target.value))} type="number" placeholder="e.g. 24" required />
+                  <Input
+                    value={formState.stateCode || ""}
+                    onChange={(e) => updateField("stateCode", e.target.value === "" ? 0 : Number(e.target.value))}
+                    type="number"
+                    placeholder="e.g. 24"
+                    required
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Address Line 1</label>
@@ -165,7 +171,13 @@ export default function ClientsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Payment Terms (Days)</label>
-                  <Input value={formState.defaultPaymentTermsDays} onChange={(e) => updateField("defaultPaymentTermsDays", Number(e.target.value))} type="number" min={1} />
+                  <Input
+                    value={formState.defaultPaymentTermsDays || ""}
+                    onChange={(e) => updateField("defaultPaymentTermsDays", e.target.value === "" ? 0 : Number(e.target.value))}
+                    type="number"
+                    min={1}
+                    placeholder="e.g. 10"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">Email</label>

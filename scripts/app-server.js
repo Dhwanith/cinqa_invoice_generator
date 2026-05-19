@@ -298,9 +298,9 @@ function normalizeInvoiceLineItems(lineItems, showQuantity) {
 
 function validateInvoiceStatus(status) {
   const normalized = validateTrimmedString(status, 'Status').toLowerCase();
-  const allowed = new Set(['generated', 'pending', 'sent', 'paid', 'cancelled']);
+  const allowed = new Set(['generated', 'pending', 'sent', 'partially_paid', 'paid', 'cancelled']);
   if (!allowed.has(normalized)) {
-    throw new HttpError(400, 'Status must be one of: generated, pending, sent, paid, cancelled.');
+    throw new HttpError(400, 'Status must be one of: generated, pending, sent, partially_paid, paid, cancelled.');
   }
   return normalized;
 }

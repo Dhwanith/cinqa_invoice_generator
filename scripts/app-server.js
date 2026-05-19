@@ -11,6 +11,7 @@ import { listInvoices, getInvoiceDetail, deleteInvoice, updateInvoiceStatus } fr
 import { listVendors, getVendorById, createVendorRecord, updateVendorRecord } from '../src/repositories/supabase/vendor-repository.js';
 import { listReimbursements, createReimbursement, updateReimbursementStatus, deleteReimbursement, bulkApproveReimbursements } from '../src/repositories/supabase/reimbursement-repository.js';
 import { createGstr2bImport, listGstr2bImports, getGstr2bRecords, getBooksOnlyForImport, manualMatchRecord, computeGstr3bData, saveGstr3bReturn, markGstr3bFiled, listGstr3bReturns, getGstSummary } from '../src/repositories/supabase/gst-repository.js';
+import { listAccounts, listJournalEntries, createJournalEntry, deleteJournalEntry, getLatestBankBalance, saveBankBalance, getLatestCapitalEntry, saveCapitalEntry, computeProfitLoss, computeBalanceSheet, computeTrialBalance } from '../src/repositories/supabase/accounting-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
@@ -935,6 +936,89 @@ export function createApp() {
   app.get('/api/gst/summary', handleRoute(async (request, response) => {
     const fy = validateOptionalString(request.query.financialYear) || '26-27';
     response.json({ ok: true, ...(await getGstSummary(fy)) });
+  }));
+
+  // ── Accounting — Chart of Accounts ───────────────────────────────────────
+
+  app.get('/api/accounting/accounts', handleRoute(async (_req, res) => {
+    res.json({ ok: true, accounts: await listAccounts() });
+  }));
+
+  // ── Accounting — Journal Entries ──────────────────────────────────────────
+
+  app.get('/api/accounting/journals', handleRoute(async (req, res) => {
+    const dateFrom = validateOptionalString(req.query.dateFrom);
+    const dateTo   = validateOptionalString(req.query.dateTo);
+    res.json({ ok: true, entries: await listJournalEntries({ dateFrom, dateTo }) });
+  }));
+
+  app.post('/api/accounting/journals', handleRoute(async (req, res) => {
+    const body = req.body || {};
+    const entry = await createJournalEntry({
+      date: validateDateString(body.date, 'Date'),
+      description: validateTrimmedString(body.description, 'Description'),
+      lines: Array.isArray(body.lines) ? body.lines : [],
+    });
+    res.status(201).json({ ok: true, entry });
+  }));
+
+  app.delete('/api/accounting/journals/:id', handleRoute(async (req, res) => {
+    await deleteJournalEntry(req.params.id);
+    res.json({ ok: true });
+  }));
+
+  // ── Accounting — Bank Balance ──────────────────────────────────────────────
+
+  app.get('/api/accounting/bank-balance', handleRoute(async (req, res) => {
+    const asOfDate = validateOptionalString(req.query.asOfDate);
+    res.json({ ok: true, bankBalance: await getLatestBankBalance(asOfDate || null) });
+  }));
+
+  app.post('/api/accounting/bank-balance', handleRoute(async (req, res) => {
+    const body = req.body || {};
+    const entry = await saveBankBalance({
+      date: validateDateString(body.date, 'Date'),
+      balance: Number(body.balance || 0),
+      notes: validateOptionalString(body.notes),
+    });
+    res.status(201).json({ ok: true, entry });
+  }));
+
+  // ── Accounting — Capital Entries ──────────────────────────────────────────
+
+  app.get('/api/accounting/capital', handleRoute(async (req, res) => {
+    const asOfDate = validateOptionalString(req.query.asOfDate);
+    res.json({ ok: true, capital: await getLatestCapitalEntry(asOfDate || null) });
+  }));
+
+  app.post('/api/accounting/capital', handleRoute(async (req, res) => {
+    const body = req.body || {};
+    const entry = await saveCapitalEntry({
+      date: validateDateString(body.date, 'Date'),
+      openingBalance: Number(body.openingBalance || 0),
+      drawings: Number(body.drawings || 0),
+      notes: validateOptionalString(body.notes),
+    });
+    res.status(201).json({ ok: true, entry });
+  }));
+
+  // ── Accounting — Reports ──────────────────────────────────────────────────
+
+  app.get('/api/accounting/reports/profit-loss', handleRoute(async (req, res) => {
+    const dateFrom = validateTrimmedString(req.query.dateFrom, 'dateFrom');
+    const dateTo   = validateTrimmedString(req.query.dateTo,   'dateTo');
+    res.json({ ok: true, report: await computeProfitLoss({ dateFrom, dateTo }) });
+  }));
+
+  app.get('/api/accounting/reports/balance-sheet', handleRoute(async (req, res) => {
+    const asOfDate = validateTrimmedString(req.query.asOfDate, 'asOfDate');
+    res.json({ ok: true, report: await computeBalanceSheet({ asOfDate }) });
+  }));
+
+  app.get('/api/accounting/reports/trial-balance', handleRoute(async (req, res) => {
+    const dateFrom = validateTrimmedString(req.query.dateFrom, 'dateFrom');
+    const dateTo   = validateTrimmedString(req.query.dateTo,   'dateTo');
+    res.json({ ok: true, report: await computeTrialBalance({ dateFrom, dateTo }) });
   }));
 
   // ── SPA fallback ───────────────────────────────────────────────────────────

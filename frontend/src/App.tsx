@@ -14,6 +14,10 @@ import VendorsPage from "@/pages/VendorsPage";
 import PurchasesPage from "@/pages/PurchasesPage";
 import CreatePurchasePage from "@/pages/CreatePurchasePage";
 import ReimbursementsPage from "@/pages/ReimbursementsPage";
+import ProfitLossPage from "@/pages/accounting/ProfitLossPage";
+import BalanceSheetPage from "@/pages/accounting/BalanceSheetPage";
+import TrialBalancePage from "@/pages/accounting/TrialBalancePage";
+import JournalPage from "@/pages/accounting/JournalPage";
 import Gstr2bPage from "@/pages/gst/Gstr2bPage";
 import Gstr3bPage from "@/pages/gst/Gstr3bPage";
 import GstSummaryPage from "@/pages/gst/GstSummaryPage";
@@ -152,6 +156,10 @@ function AuthenticatedApp() {
         <Route path="/purchases" element={<PurchasesPage />} />
         <Route path="/purchases/new" element={<CreatePurchasePage />} />
         <Route path="/reimbursements" element={<ReimbursementsPage />} />
+        <Route path="/accounting/profit-loss"  element={<ProfitLossPage />} />
+        <Route path="/accounting/balance-sheet" element={<BalanceSheetPage />} />
+        <Route path="/accounting/trial-balance" element={<TrialBalancePage />} />
+        <Route path="/accounting/journals"      element={<JournalPage />} />
         <Route path="/gst/gstr2b" element={<Gstr2bPage />} />
         <Route path="/gst/gstr3b" element={<Gstr3bPage />} />
         <Route path="/gst/summary" element={<GstSummaryPage />} />

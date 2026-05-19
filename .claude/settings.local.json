@@ -10,7 +10,8 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(list\\(d.keys\\(\\)\\)\\)\\)\")",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(node --input-type=module --eval \"import\\('./scripts/app-server.js'\\).then\\(\\(\\) => console.log\\('app-server ok'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")"
     ]
   }
 }

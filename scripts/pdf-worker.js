@@ -11,18 +11,18 @@ const parentDir = path.dirname(rootDir);
 dotenv.config({ path: path.join(rootDir, '.env'), quiet: true });
 dotenv.config({ path: path.join(parentDir, '.env'), override: false, quiet: true });
 
-// Imports happen after dotenv so module-level env reads (if any) see .env values.
-// Our modules read process.env lazily at call time, so this order is safe.
 import { getSupabaseClient } from '../src/lib/supabase.js';
 import { processInvoicePdfJob } from '../src/services/pdf-background.js';
 
 const POLL_INTERVAL_MS = Number(process.env.PDF_WORKER_POLL_MS || '10000');
 const MAX_ATTEMPTS = Number(process.env.PDF_WORKER_MAX_ATTEMPTS || '3');
 
+let _activePoll = false;
+let _shutdown = false;
+
 async function claimAndProcessJob() {
   const supabase = getSupabaseClient();
 
-  // Find oldest pending job, or a failed job that hasn't hit max attempts
   const { data: job } = await supabase
     .from('pdf_generation_jobs')
     .select('id, invoice_id, organization_id, attempts, status')
@@ -33,7 +33,7 @@ async function claimAndProcessJob() {
 
   if (!job) return false;
 
-  // Claim atomically — another worker instance might race us
+  // Claim atomically — safe to run multiple worker instances concurrently
   const { data: claimed } = await supabase
     .from('pdf_generation_jobs')
     .update({ status: 'processing', attempts: (job.attempts || 0) + 1 })
@@ -60,28 +60,50 @@ async function claimAndProcessJob() {
   } catch (error) {
     console.error(`[PDF Worker] Failed job ${job.id}:`, error.message);
 
+    // Best-effort — Supabase v2 query builders are PromiseLike, not Promises; no .catch()
     await supabase
       .from('pdf_generation_jobs')
       .update({ status: 'failed', last_error: error.message })
-      .eq('id', job.id)
-      .catch(() => {});
+      .eq('id', job.id);
 
     return false;
   }
 }
 
 async function poll() {
+  if (_activePoll) return;
+  _activePoll = true;
+
   try {
-    // Process all available jobs in this poll cycle before waiting
-    // eslint-disable-next-line no-await-in-loop
-    while (await claimAndProcessJob()) { /* drain the queue */ }
+    while (!_shutdown && await claimAndProcessJob()) { /* drain queue */ }
   } catch (error) {
     console.error('[PDF Worker] Poll error:', error.message);
+  } finally {
+    _activePoll = false;
+    if (_shutdown) {
+      console.log('[PDF Worker] Shutdown complete.');
+      process.exit(0);
+    }
   }
 }
 
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+
+function shutdown(signal) {
+  console.log(`[${signal}] PDF worker shutting down — will exit after current job completes.`);
+  _shutdown = true;
+  if (!_activePoll) {
+    console.log('[PDF Worker] Shutdown complete.');
+    process.exit(0);
+  }
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// ── Start ────────────────────────────────────────────────────────────────────
+
 console.log(`[PDF Worker] Starting. Poll: ${POLL_INTERVAL_MS}ms, max attempts: ${MAX_ATTEMPTS}`);
 
-// Process immediately on start (catches any jobs that piled up while the worker was down)
 poll();
-setInterval(poll, POLL_INTERVAL_MS);
+setInterval(() => { if (!_shutdown) poll(); }, POLL_INTERVAL_MS);

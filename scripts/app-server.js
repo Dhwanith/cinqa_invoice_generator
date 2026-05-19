@@ -50,7 +50,18 @@ function buildHealthWarnings() {
   return warnings;
 }
 
-function buildHealthPayload() {
+async function testSupabaseConnectivity() {
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.from('organizations').select('id').limit(1);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+async function buildHealthPayload() {
+  const supabaseConnected = await testSupabaseConnectivity();
   return {
     ok: true,
     appName: 'Cinqa Invoice Desk',
@@ -58,6 +69,7 @@ function buildHealthPayload() {
     defaultSac: getEnv('DEFAULT_SAC', '998314'),
     paymentTermsDays: Number(getEnv('PAYMENT_TERMS_DAYS', '10')),
     supabaseConfigured: hasEnv('SUPABASE_URL') && hasEnv('SUPABASE_SERVICE_ROLE_KEY'),
+    supabaseConnected,
     authConfigured: hasEnv('SUPABASE_ANON_KEY'),
     config: {
       supabase: {
@@ -70,6 +82,40 @@ function buildHealthPayload() {
     warnings: buildHealthWarnings()
   };
 }
+
+// ── Webhook rate limiter (in-memory, per IP) ──────────────────────────────────
+
+const _webhookRateMap = new Map();
+const WEBHOOK_WINDOW_MS = 60_000;
+const WEBHOOK_MAX_PER_WINDOW = 30;
+
+function webhookRateLimiter(request, response, next) {
+  const ip = String(request.ip || request.socket?.remoteAddress || 'unknown');
+  const now = Date.now();
+
+  let entry = _webhookRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + WEBHOOK_WINDOW_MS };
+    _webhookRateMap.set(ip, entry);
+  }
+
+  entry.count++;
+
+  if (entry.count > WEBHOOK_MAX_PER_WINDOW) {
+    response.status(429).json({ ok: false, error: 'Too many requests. Please slow down.' });
+    return;
+  }
+
+  next();
+}
+
+// Prune expired rate-limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of _webhookRateMap) {
+    if (now > entry.resetAt) _webhookRateMap.delete(ip);
+  }
+}, 5 * 60_000);
 
 // ── Error types ───────────────────────────────────────────────────────────────
 
@@ -330,6 +376,16 @@ export function createApp() {
   const staticDir = getFrontendStaticDir();
 
   app.set('trust proxy', Number(getEnv('APP_TRUST_PROXY', '1')));
+
+  // ── Security headers ───────────────────────────────────────────────────────
+  app.use((_request, response, next) => {
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('X-Frame-Options', 'DENY');
+    response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
+
   app.use(express.json({ limit: '1mb' }));
   app.use('/assets', express.static(path.join(rootDir, 'assets')));
   app.get('/brand/cinqa-logo', (_request, response) => {
@@ -339,8 +395,8 @@ export function createApp() {
 
   // ── Public routes ──────────────────────────────────────────────────────────
 
-  app.get('/api/health', (_request, response) => {
-    response.json(buildHealthPayload());
+  app.get('/api/health', async (_request, response) => {
+    response.json(await buildHealthPayload());
   });
 
   // Public: frontend reads this to initialise the Supabase client without build-time env vars
@@ -392,6 +448,7 @@ export function createApp() {
 
   app.post(
     '/webhook/create-invoice',
+    webhookRateLimiter,
     handleRoute(async (request, response) => {
       const expectedKey = getEnv('WEBHOOK_API_KEY');
       if (expectedKey) {
@@ -617,9 +674,27 @@ export function createApp() {
 export function startServer() {
   const app = createApp();
   const port = Number(getEnv('APP_PORT', '3010'));
-  return app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Cinqa Invoice Desk running on http://localhost:${port}`);
   });
+
+  const shutdown = (signal) => {
+    console.log(`[${signal}] Shutting down gracefully...`);
+    server.close(() => {
+      console.log('[Server] All connections closed.');
+      process.exit(0);
+    });
+    // Force exit after 30 s if connections hang
+    setTimeout(() => {
+      console.error('[Server] Forced shutdown after timeout.');
+      process.exit(1);
+    }, 30_000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  return server;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === currentFilePath) {

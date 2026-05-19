@@ -83,11 +83,14 @@ export interface HealthData {
   appName: string;
   companyStateCode: number;
   supabaseConfigured: boolean;
+  supabaseConnected: boolean;
+  authConfigured: boolean;
   warnings: string[];
   config: {
     supabase: {
       hasUrl: boolean;
       hasServiceKey: boolean;
+      hasAnonKey: boolean;
       orgId: string;
     };
   };

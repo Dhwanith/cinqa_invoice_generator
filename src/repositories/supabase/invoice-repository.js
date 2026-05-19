@@ -242,10 +242,13 @@ export async function createInvoice({ organizationId, clientId, invoiceDoc }) {
   if (liError) throw new Error(`Failed to save line items: ${liError.message}`);
 
   // Enqueue background PDF generation job (best-effort — doesn't fail invoice creation)
-  await supabase
+  // Supabase v2 query builders are PromiseLike, not full Promises — use destructuring, not .catch()
+  const { error: jobError } = await supabase
     .from('pdf_generation_jobs')
-    .insert({ organization_id: organizationId, invoice_id: invoiceRow.id, status: 'pending' })
-    .catch((err) => console.error('[Invoice] Failed to enqueue PDF job:', err.message));
+    .insert({ organization_id: organizationId, invoice_id: invoiceRow.id, status: 'pending' });
+  if (jobError) {
+    console.error('[Invoice] Failed to enqueue PDF job:', jobError.message);
+  }
 
   return {
     invoiceNo: invoiceRow.invoice_no,

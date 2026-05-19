@@ -68,11 +68,11 @@ export function scheduleInvoicePdfGeneration(invoiceId, organizationId) {
     } catch (error) {
       console.error(`[PDF Background] Job failed for invoice ${invoiceId}:`, error.message);
 
+      // Supabase v2 query builders are PromiseLike, not full Promises — errors come in the result object
       await supabase
         .from('pdf_generation_jobs')
         .update({ status: 'failed', last_error: error.message })
-        .eq('invoice_id', invoiceId)
-        .catch(() => {});
+        .eq('invoice_id', invoiceId);
     }
   });
 }

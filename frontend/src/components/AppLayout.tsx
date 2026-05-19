@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, FileText, FilePlus, LogOut, Menu, X,
-  Receipt, Building2, ShoppingBag, Wallet,
+  Receipt, Building2, ShoppingBag, Wallet, FileSpreadsheet, Calculator, BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -31,6 +31,14 @@ const navGroups = [
     label: "Expenses",
     items: [
       { to: "/reimbursements", icon: Wallet, label: "Reimbursements" },
+    ],
+  },
+  {
+    label: "GST",
+    items: [
+      { to: "/gst/gstr3b",  icon: Calculator,      label: "GSTR-3B Filing" },
+      { to: "/gst/gstr2b",  icon: FileSpreadsheet, label: "GSTR-2B Recon" },
+      { to: "/gst/summary", icon: BarChart3,        label: "GST Summary" },
     ],
   },
 ];

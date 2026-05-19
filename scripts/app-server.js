@@ -10,6 +10,7 @@ import { queryClients, getClientById, createClientRecord, updateClientRecord } f
 import { listInvoices, getInvoiceDetail, deleteInvoice, updateInvoiceStatus } from '../src/repositories/supabase/invoice-repository.js';
 import { listVendors, getVendorById, createVendorRecord, updateVendorRecord } from '../src/repositories/supabase/vendor-repository.js';
 import { listReimbursements, createReimbursement, updateReimbursementStatus, deleteReimbursement, bulkApproveReimbursements } from '../src/repositories/supabase/reimbursement-repository.js';
+import { createGstr2bImport, listGstr2bImports, getGstr2bRecords, getBooksOnlyForImport, manualMatchRecord, computeGstr3bData, saveGstr3bReturn, markGstr3bFiled, listGstr3bReturns, getGstSummary } from '../src/repositories/supabase/gst-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
 import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
@@ -858,6 +859,83 @@ export function createApp() {
       response.json({ ok: true, deleted });
     })
   );
+
+  // ── GST — GSTR-2B ─────────────────────────────────────────────────────────
+
+  app.get('/api/gst/gstr2b/imports', handleRoute(async (_request, response) => {
+    response.json({ ok: true, imports: await listGstr2bImports() });
+  }));
+
+  app.post('/api/gst/gstr2b/import', handleRoute(async (request, response) => {
+    const body = request.body || {};
+    if (!Array.isArray(body.records) || body.records.length === 0) {
+      throw new HttpError(400, 'records must be a non-empty array.');
+    }
+    const importRun = await createGstr2bImport({
+      financialYear: validateTrimmedString(body.financialYear, 'financialYear'),
+      month: Number(body.month),
+      periodLabel: validateTrimmedString(body.periodLabel, 'periodLabel'),
+      filename: validateOptionalString(body.filename),
+      records: body.records,
+    });
+    response.status(201).json({ ok: true, import: importRun });
+  }));
+
+  app.get('/api/gst/gstr2b/:importId/records', handleRoute(async (request, response) => {
+    response.json({ ok: true, records: await getGstr2bRecords(request.params.importId) });
+  }));
+
+  app.get('/api/gst/gstr2b/:importId/books-only', handleRoute(async (request, response) => {
+    response.json({ ok: true, purchases: await getBooksOnlyForImport(request.params.importId) });
+  }));
+
+  app.patch('/api/gst/gstr2b/records/:recordId/match', handleRoute(async (request, response) => {
+    const purchaseId = validateTrimmedString(request.body.purchaseId, 'purchaseId');
+    const record = await manualMatchRecord(request.params.recordId, purchaseId);
+    response.json({ ok: true, record });
+  }));
+
+  // ── GST — GSTR-3B ─────────────────────────────────────────────────────────
+
+  app.get('/api/gst/gstr3b', handleRoute(async (_request, response) => {
+    response.json({ ok: true, returns: await listGstr3bReturns() });
+  }));
+
+  app.post('/api/gst/gstr3b/compute', handleRoute(async (request, response) => {
+    const financialYear = validateTrimmedString(request.body.financialYear, 'financialYear');
+    const month = Number(request.body.month);
+    if (!month || month < 1 || month > 12) throw new HttpError(400, 'month must be 1–12.');
+    const computed = await computeGstr3bData(financialYear, month);
+    response.json({ ok: true, computed });
+  }));
+
+  app.post('/api/gst/gstr3b/save', handleRoute(async (request, response) => {
+    const body = request.body || {};
+    const data = await saveGstr3bReturn({
+      financialYear: validateTrimmedString(body.financialYear, 'financialYear'),
+      month: Number(body.month),
+      periodLabel: validateTrimmedString(body.periodLabel, 'periodLabel'),
+      computed: body.computed,
+      manualAdjustments: body.manualAdjustments || null,
+      notes: validateOptionalString(body.notes),
+    });
+    response.json({ ok: true, return: data });
+  }));
+
+  app.patch('/api/gst/gstr3b/:id/file', handleRoute(async (request, response) => {
+    const data = await markGstr3bFiled(request.params.id, {
+      filedDate: validateDateString(request.body.filedDate, 'filedDate'),
+      filedReference: validateOptionalString(request.body.filedReference),
+    });
+    response.json({ ok: true, return: data });
+  }));
+
+  // ── GST — Summary ──────────────────────────────────────────────────────────
+
+  app.get('/api/gst/summary', handleRoute(async (request, response) => {
+    const fy = validateOptionalString(request.query.financialYear) || '26-27';
+    response.json({ ok: true, ...(await getGstSummary(fy)) });
+  }));
 
   // ── SPA fallback ───────────────────────────────────────────────────────────
 

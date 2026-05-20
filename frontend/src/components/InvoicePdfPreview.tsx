@@ -1,7 +1,8 @@
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, Eye } from "lucide-react";
+import { X, Download, Eye, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getActualInvoicePdfPreviewUrl, downloadInvoicePdf } from "@/services/invoicePdf";
+import { fetchInvoicePdfUrl, downloadInvoicePdf } from "@/services/invoicePdf";
 import type { Invoice } from "@/types/invoice";
 
 interface Props {
@@ -10,9 +11,29 @@ interface Props {
 }
 
 export default function InvoicePdfPreview({ invoice, onClose }: Props) {
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    setResolvedUrl(null);
+    setLoadError(null);
+    if (!invoice) return;
+    fetchInvoicePdfUrl(invoice)
+      .then(({ url }) => setResolvedUrl(url))
+      .catch((err) => setLoadError(err.message ?? "Failed to load PDF"));
+  }, [invoice?.id]);
+
   if (!invoice) return null;
 
-  const pdfUrl = getActualInvoicePdfPreviewUrl(invoice);
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf(invoice);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -46,9 +67,11 @@ export default function InvoicePdfPreview({ invoice, onClose }: Props) {
                 variant="outline"
                 size="sm"
                 className="text-xs h-8 gap-1.5"
-                onClick={() => downloadInvoicePdf(invoice)}
+                disabled={downloading}
+                onClick={handleDownload}
               >
-                <Download size={14} /> Download PDF
+                {downloading ? <LoaderCircle size={14} className="animate-spin" /> : <Download size={14} />}
+                {downloading ? "Preparing…" : "Download PDF"}
               </Button>
               <button
                 onClick={onClose}
@@ -60,11 +83,21 @@ export default function InvoicePdfPreview({ invoice, onClose }: Props) {
           </div>
 
           <div className="flex-1 bg-muted/30 p-4 overflow-hidden">
-            <iframe
-              src={pdfUrl}
-              className="w-full h-full rounded-xl border border-border bg-white"
-              title="Invoice PDF Preview"
-            />
+            {loadError ? (
+              <div className="w-full h-full flex items-center justify-center text-sm text-destructive">
+                {loadError}
+              </div>
+            ) : !resolvedUrl ? (
+              <div className="w-full h-full flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <LoaderCircle size={16} className="animate-spin" /> Loading PDF…
+              </div>
+            ) : (
+              <iframe
+                src={resolvedUrl}
+                className="w-full h-full rounded-xl border border-border bg-white"
+                title="Invoice PDF Preview"
+              />
+            )}
           </div>
         </motion.div>
       </motion.div>

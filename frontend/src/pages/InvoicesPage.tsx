@@ -527,7 +527,7 @@ export default function InvoicesPage() {
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => loadInvoiceDetail(invoice.id, "preview")}>
                   <Eye size={12} /> Preview
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => downloadInvoicePdf(invoice)}>
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => void downloadInvoicePdf(invoice)}>
                   <FileDown size={12} /> PDF
                 </Button>
                 {invoice.invoiceType === "proforma" && (

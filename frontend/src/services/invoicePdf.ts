@@ -1,16 +1,29 @@
 import type { Invoice } from "@/types/invoice";
+import { getAuthHeader } from "@/services/api";
 
-export function getActualInvoicePdfPreviewUrl(invoice: Invoice): string {
-  return `/api/invoices/${invoice.id}/pdf`;
+export async function fetchInvoicePdfUrl(
+  invoice: Invoice
+): Promise<{ url: string; filename: string }> {
+  const authHeader = await getAuthHeader();
+  const res = await fetch(`/api/invoices/${invoice.id}/pdf-url`, {
+    headers: authHeader ? { Authorization: authHeader } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: string }).error || "Failed to load PDF");
+  }
+  const data = await res.json();
+  return { url: data.url as string, filename: data.filename as string };
 }
 
-export function getActualInvoicePdfDownloadUrl(invoice: Invoice): string | null {
-  if (!invoice.id) return null;
-  return `/api/invoices/${invoice.id}/pdf?download=1`;
-}
-
-export function downloadInvoicePdf(invoice: Invoice): void {
-  const url = getActualInvoicePdfDownloadUrl(invoice);
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
+export async function downloadInvoicePdf(invoice: Invoice): Promise<void> {
+  const { url, filename } = await fetchInvoicePdfUrl(invoice);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener noreferrer";
+  a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }

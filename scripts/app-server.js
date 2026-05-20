@@ -633,6 +633,33 @@ export function createApp() {
     })
   );
 
+  // Returns signed URL as JSON — lets the frontend fetch with auth header then open
+  // the Supabase Storage URL directly (no auth header needed for Supabase signed URLs).
+  app.get(
+    '/api/invoices/:invoiceId/pdf-url',
+    handleRoute(async (request, response) => {
+      const invoiceRecord = await getInvoiceDetail(request.params.invoiceId);
+      const filename = `${invoiceRecord.invoiceNo.replace(/\//g, '-')}.pdf`;
+
+      if (invoiceRecord.pdfStoragePath) {
+        const url = await getSignedPdfUrl(invoiceRecord.pdfStoragePath, 3600);
+        return response.json({ ok: true, url, filename, source: 'storage' });
+      }
+
+      // On-demand fallback: render with Puppeteer, return as base64 data URI
+      let clientRecord = null;
+      try { clientRecord = await resolveInvoiceClient(invoiceRecord); } catch {}
+      const invoice = buildInvoiceDocumentFromSnapshot(invoiceRecord, clientRecord);
+      const pdfBuffer = await renderInvoicePdfBuffer(invoice);
+      response.json({
+        ok: true,
+        url: `data:application/pdf;base64,${pdfBuffer.toString('base64')}`,
+        filename,
+        source: 'realtime'
+      });
+    })
+  );
+
   app.get(
     '/api/invoices/:invoiceId/pdf',
     handleRoute(async (request, response) => {

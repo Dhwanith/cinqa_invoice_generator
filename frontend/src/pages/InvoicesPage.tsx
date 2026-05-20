@@ -45,6 +45,7 @@ const STATUS_TRIGGER_CLASSES: Record<string, string> = {
   partially_paid: "border-orange-500 text-orange-600 bg-orange-500/5",
   paid:           "border-success text-success bg-success/5",
   cancelled:      "border-destructive text-destructive bg-destructive/5",
+  converted:      "border-violet-500 text-violet-600 bg-violet-500/5",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,6 +56,7 @@ const STATUS_LABELS: Record<string, string> = {
   partially_paid: "Partially Paid",
   paid:           "Paid",
   cancelled:      "Cancelled",
+  converted:      "Converted",
 };
 
 export default function InvoicesPage() {
@@ -70,7 +72,8 @@ export default function InvoicesPage() {
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState("");
   const [purchaseOrderDate, setPurchaseOrderDate] = useState(new Date().toISOString().slice(0, 10));
   const [poDateOpen, setPoDateOpen] = useState(false);
-  const [conversionSac, setConversionSac] = useState("");
+  const [lineItemSacs, setLineItemSacs] = useState<string[]>([]);
+  const [bulkSac, setBulkSac] = useState("");
 
   const { data: invoices = [], isLoading } = useQuery({
     queryKey: ["invoices", search, filter],
@@ -107,35 +110,29 @@ export default function InvoicesPage() {
   });
 
   const convertMutation = useMutation({
-    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: { purchaseOrderNumber: string; purchaseOrderDate: string; sac?: string } }) =>
+    mutationFn: ({ invoiceId, payload }: { invoiceId: string; payload: { purchaseOrderNumber: string; purchaseOrderDate: string; lineItemSacs?: string[] } }) =>
       convertProformaToTaxInvoice(invoiceId, payload),
     onSuccess: (invoice) => {
       toast.success(invoice.invoiceNo ? `Created ${invoice.invoiceNo}.` : "Tax invoice conversion requested.");
       setInvoicePendingConversion(null);
       setPurchaseOrderNumber("");
       setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
-      setConversionSac("");
+      setLineItemSacs([]);
+      setBulkSac("");
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : "Unable to convert proforma invoice.");
     },
   });
 
-  const getConversionSac = (invoice: Invoice) => {
-    const lineItemSacs = [...new Set((invoice.lineItems || []).map((lineItem) => lineItem.sac).filter(Boolean))];
-    if (lineItemSacs.length === 1) {
-      return lineItemSacs[0];
-    }
-
-    return invoice.sac && !invoice.sac.includes(",") ? invoice.sac : "";
-  };
-
   const openConversionDialog = (invoice: Invoice) => {
     setInvoicePendingConversion(invoice);
     setPurchaseOrderNumber("");
     setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
-    setConversionSac(getConversionSac(invoice));
+    setBulkSac("");
+    setLineItemSacs((invoice.lineItems || []).map((li) => li.sac || ""));
   };
 
   const sortedInvoices = useMemo(() => {
@@ -255,69 +252,111 @@ export default function InvoicesPage() {
           }
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Convert to tax invoice</DialogTitle>
+            <DialogTitle>Convert to Tax Invoice</DialogTitle>
             <DialogDescription>
               {invoicePendingConversion
-                ? `Create a tax invoice from ${invoicePendingConversion.invoiceNo} using the same client and line items.`
+                ? `Converting ${invoicePendingConversion.invoiceNo} — review SAC codes and fill in PO details.`
                 : "Create a tax invoice from this proforma invoice."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 pr-1">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground">Purchase Order No</label>
-              <Input
-                value={purchaseOrderNumber}
-                onChange={(event) => setPurchaseOrderNumber(event.target.value)}
-                placeholder="PO-7781"
-                disabled={convertMutation.isPending}
-              />
-            </div>
-            <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">SAC No</label>
-                <p className="text-xs text-muted-foreground">Change the SAC for all line items on the converted tax invoice.</p>
+          <div className="space-y-5 pr-1">
+            {/* PO details row */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Purchase Order No <span className="text-destructive">*</span></label>
+                <Input
+                  value={purchaseOrderNumber}
+                  onChange={(event) => setPurchaseOrderNumber(event.target.value)}
+                  placeholder="PO-7781"
+                  disabled={convertMutation.isPending}
+                />
               </div>
-              <Input
-                value={conversionSac}
-                onChange={(event) => setConversionSac(event.target.value)}
-                placeholder="998314"
-                disabled={convertMutation.isPending}
-              />
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">PO Date <span className="text-destructive">*</span></label>
+                <Popover open={poDateOpen} onOpenChange={setPoDateOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={convertMutation.isPending}
+                      className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      <CalendarIcon size={13} className="shrink-0 text-muted-foreground" />
+                      {purchaseOrderDate ? format(new Date(purchaseOrderDate + "T00:00:00"), "dd MMM yyyy") : "Pick date"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={purchaseOrderDate ? new Date(purchaseOrderDate + "T00:00:00") : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          const y = date.getFullYear();
+                          const m = String(date.getMonth() + 1).padStart(2, "0");
+                          const d = String(date.getDate()).padStart(2, "0");
+                          setPurchaseOrderDate(`${y}-${m}-${d}`);
+                          setPoDateOpen(false);
+                        }
+                      }}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-muted-foreground">Purchase Order Date</label>
-              <Popover open={poDateOpen} onOpenChange={setPoDateOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    disabled={convertMutation.isPending}
-                    className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:pointer-events-none"
-                  >
-                    <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
-                    {purchaseOrderDate ? format(new Date(purchaseOrderDate + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={purchaseOrderDate ? new Date(purchaseOrderDate + "T00:00:00") : undefined}
-                    onSelect={(date) => {
-                      if (date) {
-                        const y = date.getFullYear();
-                        const m = String(date.getMonth() + 1).padStart(2, "0");
-                        const d = String(date.getDate()).padStart(2, "0");
-                        setPurchaseOrderDate(`${y}-${m}-${d}`);
-                        setPoDateOpen(false);
-                      }
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+
+            {/* Line items with per-item SAC */}
+            {(invoicePendingConversion?.lineItems || []).length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">SAC Codes per Line Item</label>
+                  {/* Bulk fill helper */}
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      value={bulkSac}
+                      onChange={(e) => setBulkSac(e.target.value)}
+                      placeholder="e.g. 998314"
+                      className="h-7 text-xs w-28 px-2"
+                      disabled={convertMutation.isPending}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      disabled={!bulkSac.trim() || convertMutation.isPending}
+                      onClick={() => setLineItemSacs((invoicePendingConversion?.lineItems || []).map(() => bulkSac.trim()))}
+                    >
+                      Fill all
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border overflow-hidden divide-y divide-border/60">
+                  {(invoicePendingConversion?.lineItems || []).map((li, idx) => (
+                    <div key={li.id ?? idx} className="flex items-center gap-3 px-3 py-2.5 bg-card">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{li.description}</p>
+                        <p className="text-[10px] text-muted-foreground">{invoicePendingConversion?.showQuantity ? `Qty ${li.quantity ?? 1} × ` : ""}{(li.amount ?? 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</p>
+                      </div>
+                      <Input
+                        value={lineItemSacs[idx] ?? ""}
+                        onChange={(e) => {
+                          const next = [...lineItemSacs];
+                          next[idx] = e.target.value;
+                          setLineItemSacs(next);
+                        }}
+                        placeholder="SAC"
+                        className="h-8 text-xs w-28 text-center font-mono"
+                        disabled={convertMutation.isPending}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -334,24 +373,17 @@ export default function InvoicesPage() {
               className="gradient-warm text-primary-foreground border-0"
               disabled={convertMutation.isPending || !invoicePendingConversion || !purchaseOrderNumber.trim() || !purchaseOrderDate}
               onClick={() => {
-                if (!invoicePendingConversion) {
-                  return;
-                }
-
+                if (!invoicePendingConversion) return;
                 convertMutation.mutate({
                   invoiceId: invoicePendingConversion.id,
-                  payload: {
-                    purchaseOrderNumber,
-                    purchaseOrderDate,
-                    sac: conversionSac.trim(),
-                  },
+                  payload: { purchaseOrderNumber, purchaseOrderDate, lineItemSacs },
                 });
               }}
             >
               {convertMutation.isPending ? (
                 <>
                   <LoaderCircle size={16} className="animate-spin" />
-                  Converting...
+                  Converting…
                 </>
               ) : (
                 "Create Tax Invoice"
@@ -385,7 +417,7 @@ export default function InvoicesPage() {
           </SelectContent>
         </Select>
         <div className="flex gap-1.5 bg-muted rounded-xl p-1 overflow-x-auto">
-          {(["all", "generated", "pending", "sent", "partially_paid", "paid", "cancelled"] as const).map((option) => (
+          {(["all", "generated", "pending", "sent", "partially_paid", "paid", "cancelled", "converted"] as const).map((option) => (
             <button key={option} onClick={() => setFilter(option)} className={`px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${filter === option ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               {STATUS_LABELS[option] ?? option}
             </button>
@@ -471,28 +503,42 @@ export default function InvoicesPage() {
 
               <div className="flex flex-wrap gap-2 mt-4">
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => loadInvoiceDetail(selectedInvoice.id, "reuse")}>Reuse Items</Button>
-                {selectedInvoice.invoiceType === "proforma" && (
+                {selectedInvoice.invoiceType === "proforma" && selectedInvoice.status !== "converted" && (
                   <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(selectedInvoice)}>
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Select
-                  value={selectedInvoice.status}
-                  onValueChange={(value) => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: value })}
-                  disabled={statusMutation.isPending}
-                >
-                  <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[selectedInvoice.status] ?? ""}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="generated">Generated</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="sent">Sent</SelectItem>
-                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+                {selectedInvoice.status === "converted" ? (
+                  <StatusBadge status="converted" />
+                ) : (
+                  <Select
+                    value={selectedInvoice.status}
+                    onValueChange={(value) => statusMutation.mutate({ invoiceId: selectedInvoice.id, status: value })}
+                    disabled={statusMutation.isPending}
+                  >
+                    <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[selectedInvoice.status] ?? ""}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedInvoice.invoiceType === "proforma" ? (
+                        <>
+                          <SelectItem value="generated">Generated</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="generated">Generated</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button variant="outline" size="sm" className="text-xs h-8 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(selectedInvoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>
@@ -531,28 +577,42 @@ export default function InvoicesPage() {
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => void downloadInvoicePdf(invoice)}>
                   <FileDown size={12} /> PDF
                 </Button>
-                {invoice.invoiceType === "proforma" && (
+                {invoice.invoiceType === "proforma" && invoice.status !== "converted" && (
                   <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(invoice)}>
                     Convert to Tax Invoice
                   </Button>
                 )}
-                <Select
-                  value={invoice.status}
-                  onValueChange={(value) => statusMutation.mutate({ invoiceId: invoice.id, status: value })}
-                  disabled={statusMutation.isPending}
-                >
-                  <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[invoice.status] ?? ""}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="generated">Generated</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="sent">Sent</SelectItem>
-                    <SelectItem value="partially_paid">Partially Paid</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+                {invoice.status === "converted" ? (
+                  <StatusBadge status="converted" />
+                ) : (
+                  <Select
+                    value={invoice.status}
+                    onValueChange={(value) => statusMutation.mutate({ invoiceId: invoice.id, status: value })}
+                    disabled={statusMutation.isPending}
+                  >
+                    <SelectTrigger className={`h-8 w-36 text-xs font-semibold ${STATUS_TRIGGER_CLASSES[invoice.status] ?? ""}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {invoice.invoiceType === "proforma" ? (
+                        <>
+                          <SelectItem value="generated">Generated</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </>
+                      ) : (
+                        <>
+                          <SelectItem value="generated">Generated</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive" onClick={() => setInvoicePendingDelete(invoice)}>
                   <Trash2 size={12} /> Delete
                 </Button>

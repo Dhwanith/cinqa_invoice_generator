@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import { getClientById, getClientByGstin } from '../repositories/supabase/client-repository.js';
-import { getInvoiceDetail, createInvoice, getInvoiceByIdempotencyKey } from '../repositories/supabase/invoice-repository.js';
+import { getInvoiceDetail, createInvoice, getInvoiceByIdempotencyKey, updateInvoiceStatus } from '../repositories/supabase/invoice-repository.js';
 import { buildInvoiceDocument } from './invoice.js';
 import { getFinancialYearLabel, formatDisplayDate } from './financial-year.js';
 import { getSupabaseClient, getDefaultOrgId } from '../lib/supabase.js';
@@ -96,7 +96,7 @@ export async function convertProformaToTaxInvoice({
   purchaseOrderNumber,
   purchaseOrderDate,
   invoiceDate,
-  sac
+  lineItemSacs   // string[] — per-line-item SAC overrides, parallel to proforma line items
 }) {
   const proformaInvoice = await getInvoiceDetail(invoiceId);
 
@@ -106,12 +106,12 @@ export async function convertProformaToTaxInvoice({
 
   const orgId = getDefaultOrgId();
   const client = await resolveInvoiceClient(proformaInvoice);
-  const overrideSac = sac ? String(sac).trim() : '';
   const effectiveDate = invoiceDate || new Date().toISOString().slice(0, 10);
+  const sacOverrides = Array.isArray(lineItemSacs) ? lineItemSacs : [];
 
-  const lineItems = (proformaInvoice.lineItems || []).map((li) => ({
+  const lineItems = (proformaInvoice.lineItems || []).map((li, idx) => ({
     description: li.description,
-    sac: overrideSac || li.sac || '',
+    sac: (sacOverrides[idx] && sacOverrides[idx].trim()) || li.sac || '',
     amount: li.amount,
     quantity: li.quantity,
     unitPrice: li.unitPrice
@@ -148,7 +148,12 @@ export async function convertProformaToTaxInvoice({
     }
   });
 
-  return createInvoice({ organizationId: orgId, clientId: client.id, invoiceDoc });
+  const result = await createInvoice({ organizationId: orgId, clientId: client.id, invoiceDoc });
+
+  // Mark the source proforma as converted
+  await updateInvoiceStatus(proformaInvoice.id, 'converted');
+
+  return result;
 }
 
 /**

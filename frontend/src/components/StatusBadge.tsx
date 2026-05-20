@@ -8,6 +8,7 @@ const statusStyles: Record<string, string> = {
   partially_paid:  "bg-orange-500/15 text-orange-600",
   paid:            "bg-success/15 text-success",
   cancelled:       "bg-destructive/10 text-destructive",
+  converted:       "bg-violet-500/15 text-violet-600",
   // Purchase statuses
   draft:           "bg-muted text-muted-foreground",
   booked:          "bg-blue-500/15 text-blue-600",

@@ -581,12 +581,15 @@ export function createApp() {
   app.post(
     '/api/invoices/:invoiceId/convert-to-tax',
     handleRoute(async (request, response) => {
+      const lineItemSacs = Array.isArray(request.body.lineItemSacs)
+        ? request.body.lineItemSacs.map((s) => (typeof s === 'string' ? s.trim() : ''))
+        : [];
       const invoice = await convertProformaToTaxInvoice({
         invoiceId: request.params.invoiceId,
         purchaseOrderNumber: validateTrimmedString(request.body.purchaseOrderNumber, 'Purchase Order No'),
         purchaseOrderDate: validateDateString(request.body.purchaseOrderDate, 'Purchase Order Date'),
         invoiceDate: validateOptionalString(request.body.invoiceDate) || null,
-        sac: validateOptionalString(request.body.sac)
+        lineItemSacs
       });
 
       scheduleInvoicePdfGeneration(invoice.invoiceRecordId, getDefaultOrgId());

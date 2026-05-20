@@ -127,12 +127,22 @@ export default function InvoicesPage() {
     },
   });
 
-  const openConversionDialog = (invoice: Invoice) => {
-    setInvoicePendingConversion(invoice);
+  const openConversionDialog = async (invoice: Invoice) => {
+    // Line items are only present on fully-loaded invoices (detail fetch).
+    // If they're missing (list view), fetch the detail first.
+    let full = invoice;
+    if (!invoice.lineItems) {
+      try {
+        full = await fetchInvoiceDetail(invoice.id);
+      } catch {
+        full = invoice;
+      }
+    }
+    setInvoicePendingConversion(full);
     setPurchaseOrderNumber("");
     setPurchaseOrderDate(new Date().toISOString().slice(0, 10));
     setBulkSac("");
-    setLineItemSacs((invoice.lineItems || []).map((li) => li.sac || ""));
+    setLineItemSacs((full.lineItems || []).map((li) => li.sac || ""));
   };
 
   const sortedInvoices = useMemo(() => {
@@ -504,7 +514,7 @@ export default function InvoicesPage() {
               <div className="flex flex-wrap gap-2 mt-4">
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => loadInvoiceDetail(selectedInvoice.id, "reuse")}>Reuse Items</Button>
                 {selectedInvoice.invoiceType === "proforma" && selectedInvoice.status !== "converted" && (
-                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(selectedInvoice)}>
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => void openConversionDialog(selectedInvoice)}>
                     Convert to Tax Invoice
                   </Button>
                 )}
@@ -578,7 +588,7 @@ export default function InvoicesPage() {
                   <FileDown size={12} /> PDF
                 </Button>
                 {invoice.invoiceType === "proforma" && invoice.status !== "converted" && (
-                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => openConversionDialog(invoice)}>
+                  <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => void openConversionDialog(invoice)}>
                     Convert to Tax Invoice
                   </Button>
                 )}

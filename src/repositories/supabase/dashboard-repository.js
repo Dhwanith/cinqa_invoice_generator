@@ -93,9 +93,31 @@ export async function computeDashboardSummary({ dateFrom, dateTo }) {
       activeEmployees: employees?.length || 0,
     },
     recent: {
-      invoices: (recentInvoices || []),
-      purchases: (recentPurchases || []),
-      pendingReimbs: (pendingReimbs || []).slice(0, 5),
+      invoices: (recentInvoices || []).map((i) => ({
+        id: i.id,
+        invoiceNo: i.invoice_no,
+        clientName: i.client_name,
+        total: Number(i.total || 0),
+        invoiceDate: i.invoice_date,
+        status: i.status,
+        invoiceType: i.invoice_type,
+      })),
+      purchases: (recentPurchases || []).map((p) => ({
+        id: p.id,
+        vendorName: p.vendor_name,
+        purchaseNumber: p.purchase_number,
+        total: Number(p.total || 0),
+        purchaseDate: p.purchase_date,
+        status: p.status,
+        category: p.category,
+      })),
+      pendingReimbs: (pendingReimbs || []).slice(0, 5).map((r) => ({
+        id: r.id,
+        paidBy: r.paid_by,
+        description: r.description,
+        amount: Number(r.amount || 0),
+        date: r.date,
+      })),
     },
   };
 }

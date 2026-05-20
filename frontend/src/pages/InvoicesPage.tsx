@@ -82,6 +82,7 @@ export default function InvoicesPage() {
     onSuccess: (invoice) => {
       toast.success(`${invoice.invoiceNo} updated to ${invoice.status}.`);
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       if (selectedInvoice?.id === invoice.id) {
         setSelectedInvoice({ ...selectedInvoice, ...invoice });
       }

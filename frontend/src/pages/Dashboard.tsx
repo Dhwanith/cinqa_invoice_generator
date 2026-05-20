@@ -64,7 +64,7 @@ export default function Dashboard() {
   const { data: summary, isLoading } = useQuery({
     queryKey: ['dashboard', periodParams.dateFrom, periodParams.dateTo],
     queryFn: () => fetchDashboard(periodParams),
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const s = summary;

@@ -23,16 +23,122 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   paid:      { label: "Paid",      color: "bg-success/15 text-success" },
 };
 
+function inr(amount: number): string {
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
+}
+
+function buildSalarySlipHtml(entry: PayrollEntry, run: PayrollRun, companyName: string): string {
+  const emp = entry.employee!;
+
+  const earningsRows = (
+    [["Basic Salary", entry.basic], ["HRA", entry.hra], ["Special Allowance", entry.specialAllowance], ["Other Allowances", entry.otherAllowances], ...(entry.bonus > 0 ? [["Bonus", entry.bonus]] : [])] as [string, number][]
+  ).filter(([, v]) => v > 0).map(([label, val]) =>
+    `<div class="row"><span>${label}</span><span>${inr(val)}</span></div>`
+  ).join("");
+
+  const deductionRows = (
+    [["PF (Employee)", entry.pfEmployee], ["ESI (Employee)", entry.esiEmployee], ["TDS", entry.tds], ["Other Deductions", entry.otherDeductions]] as [string, number][]
+  ).filter(([, v]) => v > 0).map(([label, val]) =>
+    `<div class="row"><span>${label}</span><span>${inr(val)}</span></div>`
+  ).join("");
+
+  const paymentLine = entry.paymentDate
+    ? `<p style="margin-top:8px;color:#666;font-size:10px;">Paid: ${entry.paymentDate}${entry.paymentReference ? ` &nbsp;·&nbsp; Ref: ${entry.paymentReference}` : ""}</p>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Salary Slip — ${emp.name} — ${run.periodLabel}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.7; color: #111; background: #fff; padding: 32px; }
+    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #111; padding-bottom: 12px; }
+    .header h1 { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+    .header p  { font-size: 11px; color: #555; margin-top: 2px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 24px; margin-bottom: 20px; border-bottom: 1px solid #ccc; padding-bottom: 14px; }
+    .meta div { font-size: 11px; }
+    .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
+    .col-head { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #444; margin-bottom: 8px; }
+    .row { display: flex; justify-content: space-between; padding: 2px 0; }
+    .row span:last-child { font-weight: 600; }
+    .subtotal { display: flex; justify-content: space-between; border-top: 1px solid #ccc; margin-top: 6px; padding-top: 4px; font-weight: 700; }
+    .net { display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #111; margin-top: 16px; padding-top: 12px; }
+    .net-label { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.06em; }
+    .net-amount { font-size: 22px; font-weight: 900; }
+    .signatures { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 40px; padding-top: 12px; border-top: 1px solid #ccc; text-align: center; font-size: 10px; color: #666; }
+    .sig-line { height: 32px; border-bottom: 1px solid #aaa; margin-bottom: 4px; }
+    .footer { text-align: center; font-size: 9px; color: #999; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${companyName}</h1>
+    <p>Salary Slip &mdash; ${run.periodLabel}</p>
+  </div>
+
+  <div class="meta">
+    <div><b>Name:</b> ${emp.name}</div>
+    <div><b>Employee Code:</b> ${emp.employeeCode || "—"}</div>
+    <div><b>Designation:</b> ${emp.designation || "—"}</div>
+    <div><b>PAN:</b> ${emp.pan || "—"}</div>
+    <div><b>Working Days:</b> ${entry.workingDays}</div>
+    <div><b>Present Days:</b> ${entry.presentDays}</div>
+    <div><b>LOP Days:</b> ${entry.lopDays}</div>
+    <div><b>Bank:</b> ${emp.bankName || "—"}${emp.bankAccount ? ` &middot; ${emp.bankAccount}` : ""}</div>
+  </div>
+
+  <div class="columns">
+    <div>
+      <p class="col-head">Earnings</p>
+      ${earningsRows}
+      <div class="subtotal"><span>Gross Earnings</span><span>${inr(entry.grossSalary)}</span></div>
+    </div>
+    <div>
+      <p class="col-head">Deductions</p>
+      ${deductionRows || '<div class="row"><span>—</span><span>—</span></div>'}
+      <div class="subtotal"><span>Total Deductions</span><span>${inr(entry.totalDeductions)}</span></div>
+    </div>
+  </div>
+
+  <div class="net">
+    <span class="net-label">Net Salary</span>
+    <span class="net-amount">${inr(entry.netSalary)}</span>
+  </div>
+
+  ${paymentLine}
+
+  <div class="signatures">
+    <div><div class="sig-line"></div><p>Employee Signature</p></div>
+    <div><div class="sig-line"></div><p>Authorised Signatory</p></div>
+  </div>
+
+  <p class="footer">This is a computer-generated salary slip.</p>
+  <script>window.onload = function () { window.focus(); window.print(); };</script>
+</body>
+</html>`;
+}
+
+function printSalarySlip(entry: PayrollEntry, run: PayrollRun, companyName: string) {
+  const html = buildSalarySlipHtml(entry, run, companyName);
+  const w = window.open("", "_blank", "width=860,height=700");
+  if (!w) { toast.error("Pop-up blocked — please allow pop-ups for this site."); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
 function SalarySlip({ entry, run, companyName }: { entry: PayrollEntry; run: PayrollRun; companyName: string }) {
   const emp = entry.employee;
   if (!emp) return null;
   return (
-    <div className="salary-slip-content font-mono text-[11px] leading-relaxed">
-      <div className="text-center mb-4">
+    <div className="font-mono text-[11px] leading-relaxed">
+      <div className="text-center mb-4 pb-3 border-b-2 border-border">
         <p className="text-base font-black uppercase tracking-wide">{companyName}</p>
         <p className="text-xs text-muted-foreground">Salary Slip — {run.periodLabel}</p>
       </div>
-      <div className="grid grid-cols-2 gap-x-6 mb-4 text-[11px]">
+      <div className="grid grid-cols-2 gap-x-6 mb-4 pb-3 border-b border-border text-[11px]">
         <div><b>Name:</b> {emp.name}</div>
         <div><b>Code:</b> {emp.employeeCode || "—"}</div>
         <div><b>Designation:</b> {emp.designation || "—"}</div>
@@ -42,19 +148,20 @@ function SalarySlip({ entry, run, companyName }: { entry: PayrollEntry; run: Pay
         <div><b>LOP Days:</b> {entry.lopDays}</div>
         <div><b>Bank:</b> {emp.bankName || "—"} {emp.bankAccount ? `· ${emp.bankAccount}` : ""}</div>
       </div>
-      <div className="grid grid-cols-2 gap-4 border-t border-border pt-3">
+      <div className="grid grid-cols-2 gap-4">
         <div>
-          <p className="font-bold mb-2 uppercase text-[10px] tracking-wider">Earnings</p>
+          <p className="font-bold mb-2 uppercase text-[9px] tracking-wider text-muted-foreground">Earnings</p>
           {[["Basic Salary", entry.basic], ["HRA", entry.hra], ["Special Allowance", entry.specialAllowance], ["Other Allowances", entry.otherAllowances], ...(entry.bonus > 0 ? [["Bonus", entry.bonus]] : [])].filter(([, v]) => Number(v) > 0).map(([label, val]) => (
             <div key={label as string} className="flex justify-between py-0.5"><span>{label as string}</span><span className="font-semibold">{formatCurrency(val as number)}</span></div>
           ))}
           <div className="flex justify-between py-1 border-t border-border mt-1 font-bold"><span>Gross Earnings</span><span>{formatCurrency(entry.grossSalary)}</span></div>
         </div>
         <div>
-          <p className="font-bold mb-2 uppercase text-[10px] tracking-wider">Deductions</p>
+          <p className="font-bold mb-2 uppercase text-[9px] tracking-wider text-muted-foreground">Deductions</p>
           {[["PF (Employee)", entry.pfEmployee], ["ESI (Employee)", entry.esiEmployee], ["TDS", entry.tds], ["Other Deductions", entry.otherDeductions]].filter(([, v]) => Number(v) > 0).map(([label, val]) => (
             <div key={label as string} className="flex justify-between py-0.5"><span>{label as string}</span><span className="font-semibold">{formatCurrency(val as number)}</span></div>
           ))}
+          {[entry.pfEmployee, entry.esiEmployee, entry.tds, entry.otherDeductions].every(v => v === 0) && <div className="text-muted-foreground py-0.5">—</div>}
           <div className="flex justify-between py-1 border-t border-border mt-1 font-bold"><span>Total Deductions</span><span>{formatCurrency(entry.totalDeductions)}</span></div>
         </div>
       </div>
@@ -63,16 +170,16 @@ function SalarySlip({ entry, run, companyName }: { entry: PayrollEntry; run: Pay
         <span className="font-black text-2xl text-primary">{formatCurrency(entry.netSalary)}</span>
       </div>
       {entry.paymentDate && (
-        <div className="mt-2 text-muted-foreground flex gap-4">
+        <div className="mt-2 text-muted-foreground text-[10px] flex gap-4">
           <span>Paid: {entry.paymentDate}</span>
           {entry.paymentReference && <span>Ref: {entry.paymentReference}</span>}
         </div>
       )}
       <div className="mt-6 pt-4 border-t border-border grid grid-cols-2 text-center text-[10px] text-muted-foreground">
-        <div><div className="h-8" /><p>Employee Signature</p></div>
-        <div><div className="h-8" /><p>Authorised Signatory</p></div>
+        <div><div className="h-8 border-b border-border/60 mb-1" /><p>Employee Signature</p></div>
+        <div><div className="h-8 border-b border-border/60 mb-1" /><p>Authorised Signatory</p></div>
       </div>
-      <p className="text-center text-[10px] text-muted-foreground mt-3">This is a computer-generated salary slip.</p>
+      <p className="text-center text-[9px] text-muted-foreground mt-3">This is a computer-generated salary slip.</p>
     </div>
   );
 }
@@ -127,9 +234,9 @@ function EntryRow({ entry, run, onUpdate }: { entry: PayrollEntry; run: PayrollR
       </tr>
       <Dialog open={slipOpen} onOpenChange={setSlipOpen}>
         <DialogContent className="max-w-2xl">
-          <div className="flex justify-between items-center mb-4 no-print">
+          <div className="flex justify-between items-center mb-4">
             <p className="text-sm font-bold">Salary Slip — {emp.name} — {run.periodLabel}</p>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => printSalarySlip(entry, run, "Cinqa Tech Solutions LLP")}>
               <Printer size={13} /> Print
             </Button>
           </div>
@@ -304,15 +411,6 @@ export default function PayrollRegisterPage() {
         </div>
       )}
 
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          body > * { display: none !important; }
-          .salary-slip-content { display: block !important; }
-          [role="dialog"] { display: block !important; position: fixed !important; inset: 0 !important; background: white !important; padding: 24px !important; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
     </div>
   );
 }

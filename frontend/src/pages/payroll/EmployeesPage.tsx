@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { motion } from "framer-motion";
-import { IndianRupee, Plus, Search, UserCheck, X } from "lucide-react";
+import { CalendarIcon, IndianRupee, Plus, Search, UserCheck, X } from "lucide-react";
+import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
@@ -8,6 +9,8 @@ import StatusBadge from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCurrency } from "@/services/api";
@@ -22,6 +25,44 @@ const defaultForm: CreateEmployeePayload = {
 };
 
 const TYPE_LABELS: Record<EmployeeType, string> = { employee: "Employee", partner: "Partner", consultant: "Consultant" };
+
+function toDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function DatePicker({ value, onChange, placeholder = "Pick date", disabled }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? new Date(value + "T00:00:00") : undefined;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className="w-full rounded-xl border border-input bg-background px-4 py-2.5 text-sm flex items-center gap-2 text-left focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:pointer-events-none"
+        >
+          <CalendarIcon size={13} className="shrink-0 text-muted-foreground" />
+          <span className={value ? "text-foreground" : "text-muted-foreground"}>
+            {value ? format(selected!, "dd MMM yyyy") : placeholder}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={selected}
+          onSelect={(d) => { if (d) { onChange(toDateString(d)); setOpen(false); } }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function EmployeesPage() {
   const qc = useQueryClient();
@@ -108,7 +149,10 @@ export default function EmployeesPage() {
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Designation</label><Input value={form.designation} onChange={(e) => upd("designation", e.target.value)} placeholder="Software Engineer" /></div>
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Department</label><Input value={form.department} onChange={(e) => upd("department", e.target.value)} placeholder="Engineering" /></div>
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">PAN</label><Input value={form.pan} onChange={(e) => upd("pan", e.target.value.toUpperCase())} placeholder="ABCDE1234F" maxLength={10} /></div>
-                <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Join Date</label><Input type="date" value={form.joinDate} onChange={(e) => upd("joinDate", e.target.value)} /></div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground">Join Date</label>
+                  <DatePicker value={form.joinDate} onChange={(v) => upd("joinDate", v)} placeholder="Select join date" />
+                </div>
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Bank Account</label><Input value={form.bankAccount} onChange={(e) => upd("bankAccount", e.target.value)} placeholder="Account number" /></div>
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Bank Name</label><Input value={form.bankName} onChange={(e) => upd("bankName", e.target.value)} placeholder="Axis Bank" /></div>
                 <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">IFSC</label><Input value={form.bankIfsc} onChange={(e) => upd("bankIfsc", e.target.value.toUpperCase())} placeholder="UTIB0005112" /></div>
@@ -138,7 +182,7 @@ export default function EmployeesPage() {
               {([["basic", "Basic Salary"], ["hra", "HRA"], ["specialAllowance", "Special Allowance"], ["otherAllowances", "Other Allowances"]] as const).map(([key, label]) => (
                 <div key={key} className="space-y-1.5">
                   <label className="text-xs font-semibold text-muted-foreground">{label} (₹/month)</label>
-                  <Input type="number" min={0} value={(salaryForm as any)[key] || ""} onChange={(e) => setSalaryForm((f) => ({ ...f, [key]: e.target.value === "" ? 0 : Number(e.target.value) }))} placeholder="0" />
+                  <Input type="number" min={0} value={(salaryForm as Record<string, unknown>)[key] as number || ""} onChange={(e) => setSalaryForm((f) => ({ ...f, [key]: e.target.value === "" ? 0 : Number(e.target.value) }))} placeholder="0" />
                 </div>
               ))}
             </div>
@@ -151,7 +195,14 @@ export default function EmployeesPage() {
               <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">TDS/month (₹)</label><Input type="number" value={salaryForm.tdsMonthly || ""} onChange={(e) => setSalaryForm((f) => ({ ...f, tdsMonthly: Number(e.target.value) }))} placeholder="0" /></div>
             </div>
             <p className="text-xs text-muted-foreground">TDS monthly amount is provided by your CA based on annual income projection. PF is computed on Basic (capped at ₹15,000).</p>
-            <div className="space-y-1.5"><label className="text-xs font-semibold text-muted-foreground">Effective From</label><Input type="date" value={salaryForm.effectiveFrom || new Date().toISOString().slice(0, 10)} onChange={(e) => setSalaryForm((f) => ({ ...f, effectiveFrom: e.target.value }))} /></div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-muted-foreground">Effective From</label>
+              <DatePicker
+                value={salaryForm.effectiveFrom || new Date().toISOString().slice(0, 10)}
+                onChange={(v) => setSalaryForm((f) => ({ ...f, effectiveFrom: v }))}
+                placeholder="Select effective date"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSalaryEmployee(null)}>Cancel</Button>

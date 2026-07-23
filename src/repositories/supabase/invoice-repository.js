@@ -257,3 +257,89 @@ export async function createInvoice({ organizationId, clientId, invoiceDoc }) {
     status: invoiceRow.status
   };
 }
+
+export async function updateInvoice({ organizationId, invoiceId, clientId, invoiceDoc }) {
+  const supabase = getSupabaseClient();
+
+  const { data: invoiceRow, error: invError } = await supabase
+    .from('invoices')
+    .update({
+      invoice_type: invoiceDoc.invoiceType,
+      show_quantity: invoiceDoc.showQuantity,
+      include_due_date: invoiceDoc.includeDueDate,
+      invoice_date: invoiceDoc.invoiceDate,
+      due_date: invoiceDoc.dueDate || null,
+      client_id: clientId || null,
+      client_name: invoiceDoc.client.name,
+      gstin: invoiceDoc.client.gstin,
+      state: invoiceDoc.client.state,
+      state_code: invoiceDoc.client.stateCode,
+      place_of_supply: invoiceDoc.placeOfSupply,
+      gst_type: invoiceDoc.gstType,
+      amount: invoiceDoc.amount,
+      cgst: invoiceDoc.cgst,
+      sgst: invoiceDoc.sgst,
+      igst: invoiceDoc.igst,
+      total: invoiceDoc.total,
+      sac: invoiceDoc.sac,
+      reverse_charge: invoiceDoc.reverseCharge,
+      total_in_words: invoiceDoc.totalInWords,
+      payment_terms_label: invoiceDoc.paymentTermsLabel || '',
+      pdf_storage_path: null,
+      pdf_generated_at: null
+    })
+    .eq('id', invoiceId)
+    .select()
+    .single();
+
+  if (invError) {
+    throw new Error(`Failed to update invoice: ${invError.message}`);
+  }
+
+  // Delete existing line items
+  const { error: delError } = await supabase
+    .from('invoice_line_items')
+    .delete()
+    .eq('invoice_id', invoiceId);
+
+  if (delError) throw new Error(`Failed to update line items (delete step): ${delError.message}`);
+
+  // Insert updated line items
+  const lineItemRows = invoiceDoc.lineItems.map((li) => ({
+    organization_id: organizationId,
+    invoice_id: invoiceRow.id,
+    line_number: li.lineNumber,
+    description: li.description,
+    sac: li.sac || '',
+    quantity: li.quantity !== null && li.quantity !== undefined ? li.quantity : null,
+    unit_price: li.unitPrice !== null && li.unitPrice !== undefined ? li.unitPrice : null,
+    amount: li.amount,
+    taxable_value: li.taxableValue || li.amount,
+    cgst: li.cgst || 0,
+    sgst: li.sgst || 0,
+    igst: li.igst || 0,
+    total: li.total || li.amount
+  }));
+
+  const { error: liError } = await supabase
+    .from('invoice_line_items')
+    .insert(lineItemRows);
+
+  if (liError) throw new Error(`Failed to save updated line items: ${liError.message}`);
+
+  // Enqueue background PDF generation job
+  const { error: jobError } = await supabase
+    .from('pdf_generation_jobs')
+    .insert({ organization_id: organizationId, invoice_id: invoiceRow.id, status: 'pending' });
+  if (jobError) {
+    console.error('[Invoice] Failed to enqueue PDF job on update:', jobError.message);
+  }
+
+  return {
+    invoiceNo: invoiceRow.invoice_no,
+    invoiceRecordId: invoiceRow.id,
+    total: Number(invoiceRow.total),
+    status: invoiceRow.status
+  };
+}
+

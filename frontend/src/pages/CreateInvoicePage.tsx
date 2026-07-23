@@ -2,11 +2,12 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { CalendarIcon, Check, CheckCircle2, ChevronsUpDown, FileDown, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useLocation } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
-import { createInvoice, type CreateInvoiceResult, fetchClients, formatCurrency } from "@/services/api";
+import { createInvoice, fetchInvoiceDetail, updateInvoice, type CreateInvoiceResult, fetchClients, formatCurrency } from "@/services/api";
+import { downloadInvoicePdf } from "@/services/invoicePdf";
 import type { Invoice, LineItem } from "@/types/invoice";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,12 +34,22 @@ function getLineItemAmount(item: LineItem, showQuantity: boolean) {
 }
 
 export default function CreateInvoicePage() {
+  const { id } = useParams<{ id?: string }>();
+  const isEdit = Boolean(id);
   const location = useLocation();
   const templateInvoice = (location.state as TemplateLocationState | null)?.templateInvoice;
+
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ["clients", "active"],
     queryFn: () => fetchClients({ active: "active" }),
   });
+
+  const { data: existingInvoice, isLoading: isInvoiceLoading } = useQuery({
+    queryKey: ["invoice", id],
+    queryFn: () => fetchInvoiceDetail(id!),
+    enabled: Boolean(id),
+  });
+
   const [selectedClientId, setSelectedClientId] = useState("");
   const [clientOpen, setClientOpen] = useState(false);
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10));
@@ -50,11 +61,40 @@ export default function CreateInvoicePage() {
     { description: "", sac: "", amount: 0, quantity: null, unitPrice: null },
   ]);
   const [submittedInvoice, setSubmittedInvoice] = useState<CreateInvoiceResult | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
+  // Pre-fill fields when editing an existing invoice
   useEffect(() => {
-    if (!clients.length) {
-      return;
+    if (!isEdit || !existingInvoice) return;
+
+    if (existingInvoice.clientRecordId) {
+      setSelectedClientId(existingInvoice.clientRecordId);
+    } else if (clients.length) {
+      const matched = clients.find((c) => c.name === existingInvoice.clientName);
+      if (matched) setSelectedClientId(matched.id);
     }
+
+    if (existingInvoice.invoiceDate) setInvoiceDate(existingInvoice.invoiceDate);
+    setInvoiceType(existingInvoice.invoiceType === "proforma" ? "proforma" : "tax");
+    setShowQuantity(Boolean(existingInvoice.showQuantity));
+    setIncludeDueDate(existingInvoice.includeDueDate !== false);
+
+    if (existingInvoice.lineItems?.length) {
+      setLineItems(
+        existingInvoice.lineItems.map((li) => ({
+          description: li.description,
+          sac: li.sac || "",
+          amount: li.amount,
+          quantity: li.quantity ?? (existingInvoice.showQuantity ? 1 : null),
+          unitPrice: li.unitPrice ?? (existingInvoice.showQuantity ? li.amount : null),
+        }))
+      );
+    }
+  }, [isEdit, existingInvoice, clients]);
+
+  // Pre-fill fields when creating from template
+  useEffect(() => {
+    if (isEdit || !clients.length) return;
 
     if (templateInvoice) {
       const matchedClient = clients.find((client) => client.name === templateInvoice.clientName && client.active);
@@ -81,7 +121,7 @@ export default function CreateInvoicePage() {
     }
 
     setSelectedClientId((current) => current || clients[0]?.id || "");
-  }, [clients, templateInvoice]);
+  }, [clients, templateInvoice, isEdit]);
 
   useEffect(() => {
     if (invoiceType === "tax") {
@@ -114,6 +154,18 @@ export default function CreateInvoicePage() {
     },
   });
 
+  const updateInvoiceMutation = useMutation({
+    mutationFn: (payload: { clientId: string; invoiceDate: string; invoiceType?: "tax" | "proforma"; showQuantity?: boolean; includeDueDate?: boolean; lineItems: LineItem[] }) =>
+      updateInvoice(id!, payload),
+    onSuccess: (invoice) => {
+      setSubmittedInvoice(invoice);
+      toast.success(invoice.invoiceNo ? `Updated ${invoice.invoiceNo}` : "Invoice updated successfully.");
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Unable to update invoice.");
+    },
+  });
+
   const selectedClient = clients.find((client) => client.id === selectedClientId);
   const isIntraState = selectedClient?.stateCode === COMPANY_STATE_CODE;
 
@@ -131,17 +183,26 @@ export default function CreateInvoicePage() {
     return { amount, cgst, sgst, igst, total };
   }, [invoiceType, isIntraState, lineItems, showQuantity]);
 
-  const createdInvoiceDownloadUrl = useMemo(() => {
-    if (!submittedInvoice?.invoiceNo || !submittedInvoice.invoiceRecordId) return null;
-    return `/api/invoices/${submittedInvoice.invoiceRecordId}/pdf?download=1`;
-  }, [submittedInvoice]);
+  const canDownloadPdf = Boolean(submittedInvoice?.invoiceRecordId || (isEdit && id));
 
-  const handleDownloadCreatedInvoice = () => {
-    if (!createdInvoiceDownloadUrl) {
+  const handleDownloadCreatedInvoice = async () => {
+    const targetId = submittedInvoice?.invoiceRecordId || (isEdit ? id : null);
+    if (!targetId) {
       toast.error("PDF is not available for download yet.");
       return;
     }
-    window.open(createdInvoiceDownloadUrl, "_blank", "noopener,noreferrer");
+    setDownloadingPdf(true);
+    try {
+      await downloadInvoicePdf({
+        id: targetId,
+        clientName: selectedClient?.name || existingInvoice?.clientName || "",
+        invoiceNo: submittedInvoice?.invoiceNo || existingInvoice?.invoiceNo || "Invoice",
+      });
+    } catch (err) {
+      toast.error("Failed to download PDF.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   const updateLineItem = (index: number, field: keyof LineItem, value: string | number) => {
@@ -170,10 +231,12 @@ export default function CreateInvoicePage() {
     setLineItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
+  const isPending = createInvoiceMutation.isPending || updateInvoiceMutation.isPending;
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setSubmittedInvoice(null);
-    createInvoiceMutation.mutate({
+    const payload = {
       clientId: selectedClientId,
       invoiceDate,
       invoiceType,
@@ -184,15 +247,21 @@ export default function CreateInvoicePage() {
         amount: getLineItemAmount(item, showQuantity),
         sac: invoiceType === "proforma" ? item.sac || "" : item.sac,
       })),
-    });
+    };
+
+    if (isEdit && id) {
+      updateInvoiceMutation.mutate(payload);
+    } else {
+      createInvoiceMutation.mutate(payload);
+    }
   };
 
   return (
     <div>
       <PageHeader
-        kicker="Issue"
-        title="Create Invoice"
-        description="Create either a GST tax invoice or a proforma invoice, with optional quantity-based line items and proforma due-date control."
+        kicker={isEdit ? "Manage" : "Issue"}
+        title={isEdit ? `Edit ${existingInvoice?.invoiceNo || "Invoice"}` : "Create Invoice"}
+        description={isEdit ? "Update client details, line items, or billing preferences for this invoice while maintaining its sequence number." : "Create either a GST tax invoice or a proforma invoice, with optional quantity-based line items and proforma due-date control."}
       />
 
       <form onSubmit={handleSubmit} className="grid xl:grid-cols-[1.2fr,0.8fr] gap-6 items-start">
@@ -401,24 +470,24 @@ export default function CreateInvoicePage() {
           </div>
 
           <div className="flex items-center gap-4 mt-6">
-            <Button type="submit" disabled={createInvoiceMutation.isPending || !selectedClientId || isLoading} className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all px-8">
-              {createInvoiceMutation.isPending ? (
+            <Button type="submit" disabled={isPending || !selectedClientId || isLoading || (isEdit && isInvoiceLoading)} className="gradient-warm text-primary-foreground border-0 shadow-soft hover:shadow-elevated hover:-translate-y-0.5 transition-all px-8">
+              {isPending ? (
                 <>
                   <LoaderCircle size={16} className="animate-spin" />
-                  Generating {invoiceType === "proforma" ? "Proforma" : "Invoice"}...
+                  {isEdit ? "Updating Invoice..." : `Generating ${invoiceType === "proforma" ? "Proforma" : "Invoice"}...`}
                 </>
               ) : (
-                <>Generate {invoiceType === "proforma" ? "Proforma" : "Invoice"}</>
+                <>{isEdit ? "Save Changes" : `Generate ${invoiceType === "proforma" ? "Proforma" : "Invoice"}`}</>
               )}
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={!createdInvoiceDownloadUrl || createInvoiceMutation.isPending}
+              disabled={!canDownloadPdf || isPending || downloadingPdf}
               className="text-xs h-11 gap-2"
               onClick={handleDownloadCreatedInvoice}
             >
-              <FileDown size={14} /> Download PDF
+              {downloadingPdf ? <LoaderCircle size={14} className="animate-spin" /> : <FileDown size={14} />} Download PDF
             </Button>
           </div>
 
@@ -433,9 +502,9 @@ export default function CreateInvoicePage() {
                   <CheckCircle2 size={18} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-[0.18em] text-success font-semibold mb-1">Generated</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-success font-semibold mb-1">{isEdit ? "Updated" : "Generated"}</p>
                   <p className="text-base font-bold text-foreground">{submittedInvoice.invoiceNo}</p>
-                  <p className="text-sm text-muted-foreground mt-1">The invoice was created successfully. You can download the generated PDF immediately.</p>
+                  <p className="text-sm text-muted-foreground mt-1">The invoice was {isEdit ? "updated" : "created"} successfully. You can download the generated PDF immediately.</p>
                 </div>
               </div>
             </motion.div>

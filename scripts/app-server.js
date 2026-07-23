@@ -15,7 +15,7 @@ import { listAccounts, listJournalEntries, createJournalEntry, deleteJournalEntr
 import { listEmployees, createEmployee, updateEmployee, getSalaryStructure, upsertSalaryStructure, listPayrollRuns, getPayrollRun, getPayrollRunForPeriod, createPayrollRun, updatePayrollEntry, updatePayrollRunStatus, deletePayrollRun } from '../src/repositories/supabase/payroll-repository.js';
 import { computeDashboardSummary } from '../src/repositories/supabase/dashboard-repository.js';
 import { listPurchases, getPurchaseDetail, createPurchase, updatePurchaseStatus, markPurchasePaid, deletePurchase } from '../src/repositories/supabase/purchase-repository.js';
-import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
+import { WorkflowError, resolveInvoiceClient, createInvoiceFromClient, updateInvoiceDetails, convertProformaToTaxInvoice, buildInvoiceDocumentFromSnapshot, createInvoiceFromWebhookPayload } from '../src/services/invoice-workflow.js';
 import { scheduleInvoicePdfGeneration } from '../src/services/pdf-background.js';
 import { getSignedPdfUrl, deleteStoredPdf } from '../src/services/pdf-storage.js';
 import { renderInvoicePdfBuffer } from '../src/services/pdf.js';
@@ -578,6 +578,31 @@ export function createApp() {
     })
   );
 
+  app.put(
+    '/api/invoices/:invoiceId',
+    handleRoute(async (request, response) => {
+      const invoiceId = request.params.invoiceId;
+      const clientId = validateTrimmedString(request.body.clientId, 'Client');
+      const invoiceDate = validateTrimmedString(request.body.invoiceDate, 'Invoice Date');
+      const showQuantity = Boolean(request.body.showQuantity);
+      const lineItems = normalizeInvoiceLineItems(request.body.lineItems, showQuantity);
+
+      const invoice = await updateInvoiceDetails({
+        invoiceId,
+        clientId,
+        invoiceDate,
+        lineItems,
+        invoiceType: request.body.invoiceType,
+        showQuantity,
+        includeDueDate: request.body.includeDueDate
+      });
+
+      scheduleInvoicePdfGeneration(invoice.invoiceRecordId, getDefaultOrgId());
+
+      response.json({ ok: true, invoice });
+    })
+  );
+
   app.post(
     '/api/invoices/:invoiceId/convert-to-tax',
     handleRoute(async (request, response) => {
@@ -636,13 +661,19 @@ export function createApp() {
     })
   );
 
+  function getInvoiceDownloadFilename(invoiceRecord) {
+    const safeClient = (invoiceRecord?.clientName || 'Client').trim().replace(/[/\\?%*:|"<>]/g, '_');
+    const safeNo = (invoiceRecord?.invoiceNo || 'Invoice').trim().replace(/[/\\?%*:|"<>]/g, '-');
+    return `${safeClient}_${safeNo}.pdf`;
+  }
+
   // Returns signed URL as JSON — lets the frontend fetch with auth header then open
   // the Supabase Storage URL directly (no auth header needed for Supabase signed URLs).
   app.get(
     '/api/invoices/:invoiceId/pdf-url',
     handleRoute(async (request, response) => {
       const invoiceRecord = await getInvoiceDetail(request.params.invoiceId);
-      const filename = `${invoiceRecord.invoiceNo.replace(/\//g, '-')}.pdf`;
+      const filename = getInvoiceDownloadFilename(invoiceRecord);
 
       if (invoiceRecord.pdfStoragePath) {
         const url = await getSignedPdfUrl(invoiceRecord.pdfStoragePath, 3600);
@@ -687,7 +718,7 @@ export function createApp() {
 
       const invoice = buildInvoiceDocumentFromSnapshot(invoiceRecord, clientRecord);
       const pdfBuffer = await renderInvoicePdfBuffer(invoice);
-      const filename = `${invoiceRecord.invoiceNo.replace(/\//g, '-')}.pdf`;
+      const filename = getInvoiceDownloadFilename(invoiceRecord);
 
       response.setHeader('Content-Type', 'application/pdf');
       response.setHeader('Content-Disposition', `${isDownload ? 'attachment' : 'inline'}; filename="${filename}"`);

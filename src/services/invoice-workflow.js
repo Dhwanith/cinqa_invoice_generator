@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 import { getClientById, getClientByGstin } from '../repositories/supabase/client-repository.js';
-import { getInvoiceDetail, createInvoice, getInvoiceByIdempotencyKey, updateInvoiceStatus } from '../repositories/supabase/invoice-repository.js';
+import { getInvoiceDetail, createInvoice, updateInvoice, getInvoiceByIdempotencyKey, updateInvoiceStatus } from '../repositories/supabase/invoice-repository.js';
 import { buildInvoiceDocument } from './invoice.js';
 import { getFinancialYearLabel, formatDisplayDate } from './financial-year.js';
 import { getSupabaseClient, getDefaultOrgId } from '../lib/supabase.js';
@@ -90,6 +90,53 @@ export async function createInvoiceFromClient({
 
   return createInvoice({ organizationId: orgId, clientId: client.id, invoiceDoc });
 }
+
+export async function updateInvoiceDetails({
+  invoiceId,
+  clientId,
+  invoiceDate,
+  lineItems,
+  invoiceType,
+  showQuantity,
+  includeDueDate
+}) {
+  const orgId = getDefaultOrgId();
+  const existingInvoice = await getInvoiceDetail(invoiceId);
+  const client = await getClientById(clientId);
+  const normalizedType = invoiceType || existingInvoice.invoiceType || 'tax';
+
+  const invoiceDoc = buildInvoiceDocument({
+    idempotencyKey: existingInvoice.idempotencyKey || `update-${invoiceId}-${Date.now()}`,
+    invoiceDate: invoiceDate || existingInvoice.invoiceDate,
+    sequence: 1,
+    invoiceType: normalizedType,
+    showQuantity: showQuantity !== undefined ? showQuantity : existingInvoice.showQuantity,
+    includeDueDate: includeDueDate !== undefined ? includeDueDate : existingInvoice.includeDueDate,
+    client: {
+      name: client.name,
+      gstin: client.gstin,
+      state: client.state,
+      stateCode: client.stateCode,
+      addressLines: client.addressLines,
+      defaultSac: client.defaultSac,
+      defaultPaymentTermsDays: client.defaultPaymentTermsDays
+    },
+    lineItems,
+    sourceProforma: existingInvoice.sourceProforma,
+    purchaseOrder: existingInvoice.purchaseOrder
+  });
+
+  // Preserve original invoiceNo
+  invoiceDoc.invoiceNo = existingInvoice.invoiceNo;
+
+  return updateInvoice({
+    organizationId: orgId,
+    invoiceId,
+    clientId: client.id,
+    invoiceDoc
+  });
+}
+
 
 export async function convertProformaToTaxInvoice({
   invoiceId,

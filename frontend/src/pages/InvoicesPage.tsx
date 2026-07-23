@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDownUp, CalendarIcon, Search, X, FileDown, Eye, LoaderCircle, Trash2, Download } from "lucide-react";
+import { ArrowDownUp, CalendarIcon, Search, X, FileDown, Eye, LoaderCircle, Trash2, Download, Pencil } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -512,6 +512,9 @@ export default function InvoicesPage() {
               {selectedInvoice.totalInWords && <p className="text-xs text-muted-foreground mt-4 italic">{selectedInvoice.totalInWords}</p>}
 
               <div className="flex flex-wrap gap-2 mt-4">
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => navigate(`/invoices/${selectedInvoice.id}/edit`)}>
+                  <Pencil size={12} /> Edit
+                </Button>
                 <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => loadInvoiceDetail(selectedInvoice.id, "reuse")}>Reuse Items</Button>
                 {selectedInvoice.invoiceType === "proforma" && selectedInvoice.status !== "converted" && (
                   <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => void openConversionDialog(selectedInvoice)}>
@@ -586,6 +589,9 @@ export default function InvoicesPage() {
                 </Button>
                 <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => void downloadInvoicePdf(invoice)}>
                   <FileDown size={12} /> PDF
+                </Button>
+                <Button variant="outline" size="sm" className="text-xs h-8 gap-1" onClick={() => navigate(`/invoices/${invoice.id}/edit`)}>
+                  <Pencil size={12} /> Edit
                 </Button>
                 {invoice.invoiceType === "proforma" && invoice.status !== "converted" && (
                   <Button variant="outline" size="sm" className="text-xs h-8" onClick={() => void openConversionDialog(invoice)}>

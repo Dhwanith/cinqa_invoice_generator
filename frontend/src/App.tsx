@@ -154,6 +154,7 @@ function AuthenticatedApp() {
         <Route path="/clients" element={<ClientsPage />} />
         <Route path="/invoices" element={<InvoicesPage />} />
         <Route path="/invoices/new" element={<CreateInvoicePage />} />
+        <Route path="/invoices/:id/edit" element={<CreateInvoicePage />} />
         <Route path="/vendors" element={<VendorsPage />} />
         <Route path="/purchases" element={<PurchasesPage />} />
         <Route path="/purchases/new" element={<CreatePurchasePage />} />

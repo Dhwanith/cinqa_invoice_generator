@@ -152,7 +152,18 @@ export async function updateInvoiceStatus(invoiceId: string, status: string): Pr
   return data.invoice;
 }
 
-export async function createInvoice(payload: { clientId: string; invoiceDate: string; invoiceType?: "tax" | "proforma"; showQuantity?: boolean; includeDueDate?: boolean; lineItems: LineItem[] }): Promise<CreateInvoiceResult> {
+export interface SaveInvoicePayload {
+  clientId: string;
+  invoiceDate: string;
+  invoiceType?: "tax" | "proforma";
+  showQuantity?: boolean;
+  includeDueDate?: boolean;
+  purchaseOrderNumber?: string;
+  purchaseOrderDate?: string;
+  lineItems: LineItem[];
+}
+
+export async function createInvoice(payload: SaveInvoicePayload): Promise<CreateInvoiceResult> {
   const data = await requestJson<{ invoice: CreateInvoiceResult }>(`${API_BASE}/invoices`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -161,7 +172,7 @@ export async function createInvoice(payload: { clientId: string; invoiceDate: st
   return data.invoice;
 }
 
-export async function updateInvoice(invoiceId: string, payload: { clientId: string; invoiceDate: string; invoiceType?: "tax" | "proforma"; showQuantity?: boolean; includeDueDate?: boolean; lineItems: LineItem[] }): Promise<CreateInvoiceResult> {
+export async function updateInvoice(invoiceId: string, payload: SaveInvoicePayload): Promise<CreateInvoiceResult> {
   const data = await requestJson<{ invoice: CreateInvoiceResult }>(`${API_BASE}/invoices/${invoiceId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

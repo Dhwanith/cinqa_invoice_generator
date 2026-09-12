@@ -55,7 +55,8 @@ export async function createInvoiceFromClient({
   lineItems,
   invoiceType,
   showQuantity,
-  includeDueDate
+  includeDueDate,
+  purchaseOrder
 }) {
   const orgId = getDefaultOrgId();
   const normalizedType = invoiceType || 'tax';
@@ -85,7 +86,8 @@ export async function createInvoiceFromClient({
       defaultSac: client.defaultSac,
       defaultPaymentTermsDays: client.defaultPaymentTermsDays
     },
-    lineItems
+    lineItems,
+    ...(purchaseOrder ? { purchaseOrder } : {})
   });
 
   return createInvoice({ organizationId: orgId, clientId: client.id, invoiceDoc });
@@ -98,12 +100,20 @@ export async function updateInvoiceDetails({
   lineItems,
   invoiceType,
   showQuantity,
-  includeDueDate
+  includeDueDate,
+  purchaseOrder
 }) {
   const orgId = getDefaultOrgId();
   const existingInvoice = await getInvoiceDetail(invoiceId);
   const client = await getClientById(clientId);
   const normalizedType = invoiceType || existingInvoice.invoiceType || 'tax';
+
+  // undefined → keep existing PO; null → clear it (unless this invoice was
+  // converted from a proforma, where the PO reference must be preserved)
+  let nextPurchaseOrder = purchaseOrder !== undefined ? purchaseOrder : existingInvoice.purchaseOrder;
+  if (existingInvoice.sourceProforma && !nextPurchaseOrder) {
+    nextPurchaseOrder = existingInvoice.purchaseOrder;
+  }
 
   const invoiceDoc = buildInvoiceDocument({
     idempotencyKey: existingInvoice.idempotencyKey || `update-${invoiceId}-${Date.now()}`,
@@ -123,7 +133,7 @@ export async function updateInvoiceDetails({
     },
     lineItems,
     sourceProforma: existingInvoice.sourceProforma,
-    purchaseOrder: existingInvoice.purchaseOrder
+    purchaseOrder: nextPurchaseOrder
   });
 
   // Preserve original invoiceNo

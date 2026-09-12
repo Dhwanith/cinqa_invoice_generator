@@ -103,15 +103,17 @@ function normalizeConversionMetadata(payload, invoiceType) {
     };
   }
 
-  assert(invoiceType === 'tax', 'Proforma conversion metadata is only supported for tax invoices.');
-  assert(hasSourceProforma && hasPurchaseOrder, 'Both sourceProforma and purchaseOrder are required for proforma conversion.');
+  assert(invoiceType === 'tax', 'Purchase order and proforma conversion metadata are only supported for tax invoices.');
+  assert(!hasSourceProforma || hasPurchaseOrder, 'purchaseOrder is required when sourceProforma is provided.');
 
   return {
-    sourceProforma: {
-      invoiceRecordId: normalizeOptionalTrimmedString(sourceProforma.invoiceRecordId, 'sourceProforma.invoiceRecordId'),
-      invoiceNo: normalizeTrimmedString(sourceProforma.invoiceNo, 'sourceProforma.invoiceNo'),
-      invoiceDate: normalizeDateString(sourceProforma.invoiceDate, 'sourceProforma.invoiceDate')
-    },
+    sourceProforma: hasSourceProforma
+      ? {
+          invoiceRecordId: normalizeOptionalTrimmedString(sourceProforma.invoiceRecordId, 'sourceProforma.invoiceRecordId'),
+          invoiceNo: normalizeTrimmedString(sourceProforma.invoiceNo, 'sourceProforma.invoiceNo'),
+          invoiceDate: normalizeDateString(sourceProforma.invoiceDate, 'sourceProforma.invoiceDate')
+        }
+      : null,
     purchaseOrder: {
       number: normalizeTrimmedString(purchaseOrder.number, 'purchaseOrder.number'),
       date: normalizeDateString(purchaseOrder.date, 'purchaseOrder.date')

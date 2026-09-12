@@ -21,7 +21,7 @@ This workspace contains the first implementation slice for the GST-compliant inv
 - `src/services/validation.js`: validates and normalizes incoming invoice payloads
 - `src/services/gst.js`: computes GST split per line item and per invoice
 - `src/services/financial-year.js`: derives the financial year label and due dates
-- `src/services/invoice-number.js`: formats tax invoices as `CTS/<FY>/INV/<sequence>` and proformas as `CTS/<FY>/PI/<sequence>`
+- `src/services/invoice-number.js`: formats tax invoices as `CTS/<FY>/INV<sequence>` and proformas as `CTS/<FY>/PI<sequence>`
 - `src/services/amount-in-words.js`: converts totals into Indian currency words
 - `src/services/invoice.js`: assembles the final invoice document object
 - `src/services/pdf.js`: renders invoice HTML to PDF using Puppeteer

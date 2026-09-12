@@ -289,6 +289,16 @@ function validateOptionalString(value) {
   return String(value).trim();
 }
 
+function parseOptionalPurchaseOrder(body) {
+  if (!validateOptionalString(body.purchaseOrderNumber)) {
+    return null;
+  }
+  return {
+    number: validateTrimmedString(body.purchaseOrderNumber, 'Purchase Order No'),
+    date: validateDateString(body.purchaseOrderDate, 'Purchase Order Date')
+  };
+}
+
 function validatePositiveAmount(value, fieldName) {
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -568,7 +578,8 @@ export function createApp() {
         lineItems,
         invoiceType: request.body.invoiceType,
         showQuantity,
-        includeDueDate: request.body.includeDueDate
+        includeDueDate: request.body.includeDueDate,
+        purchaseOrder: parseOptionalPurchaseOrder(request.body)
       });
 
       // Trigger background PDF generation — does not block the response
@@ -594,7 +605,8 @@ export function createApp() {
         lineItems,
         invoiceType: request.body.invoiceType,
         showQuantity,
-        includeDueDate: request.body.includeDueDate
+        includeDueDate: request.body.includeDueDate,
+        purchaseOrder: parseOptionalPurchaseOrder(request.body)
       });
 
       scheduleInvoicePdfGeneration(invoice.invoiceRecordId, getDefaultOrgId());

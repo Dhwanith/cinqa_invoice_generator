@@ -6,7 +6,7 @@ import { useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
-import { createInvoice, fetchInvoiceDetail, updateInvoice, type CreateInvoiceResult, fetchClients, formatCurrency } from "@/services/api";
+import { createInvoice, fetchInvoiceDetail, updateInvoice, type CreateInvoiceResult, type SaveInvoicePayload, fetchClients, formatCurrency } from "@/services/api";
 import { downloadInvoicePdf } from "@/services/invoicePdf";
 import type { Invoice, LineItem } from "@/types/invoice";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,10 @@ export default function CreateInvoicePage() {
   const [invoiceType, setInvoiceType] = useState<"tax" | "proforma">("tax");
   const [showQuantity, setShowQuantity] = useState(false);
   const [includeDueDate, setIncludeDueDate] = useState(true);
+  const [includePoDetails, setIncludePoDetails] = useState(false);
+  const [poNumber, setPoNumber] = useState("");
+  const [poDate, setPoDate] = useState(new Date().toISOString().slice(0, 10));
+  const [poDateOpen, setPoDateOpen] = useState(false);
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: "", sac: "", amount: 0, quantity: null, unitPrice: null },
   ]);
@@ -78,6 +82,14 @@ export default function CreateInvoicePage() {
     setInvoiceType(existingInvoice.invoiceType === "proforma" ? "proforma" : "tax");
     setShowQuantity(Boolean(existingInvoice.showQuantity));
     setIncludeDueDate(existingInvoice.includeDueDate !== false);
+
+    if (existingInvoice.purchaseOrder?.number) {
+      setIncludePoDetails(true);
+      setPoNumber(existingInvoice.purchaseOrder.number);
+      if (existingInvoice.purchaseOrder.date) {
+        setPoDate(existingInvoice.purchaseOrder.date.slice(0, 10));
+      }
+    }
 
     if (existingInvoice.lineItems?.length) {
       setLineItems(
@@ -155,8 +167,7 @@ export default function CreateInvoicePage() {
   });
 
   const updateInvoiceMutation = useMutation({
-    mutationFn: (payload: { clientId: string; invoiceDate: string; invoiceType?: "tax" | "proforma"; showQuantity?: boolean; includeDueDate?: boolean; lineItems: LineItem[] }) =>
-      updateInvoice(id!, payload),
+    mutationFn: (payload: SaveInvoicePayload) => updateInvoice(id!, payload),
     onSuccess: (invoice) => {
       setSubmittedInvoice(invoice);
       toast.success(invoice.invoiceNo ? `Updated ${invoice.invoiceNo}` : "Invoice updated successfully.");
@@ -236,12 +247,14 @@ export default function CreateInvoicePage() {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setSubmittedInvoice(null);
-    const payload = {
+    const withPo = invoiceType === "tax" && includePoDetails && poNumber.trim() && poDate;
+    const payload: SaveInvoicePayload = {
       clientId: selectedClientId,
       invoiceDate,
       invoiceType,
       showQuantity,
       includeDueDate,
+      ...(withPo ? { purchaseOrderNumber: poNumber.trim(), purchaseOrderDate: poDate } : {}),
       lineItems: lineItems.map((item) => ({
         ...item,
         amount: getLineItemAmount(item, showQuantity),
@@ -364,6 +377,59 @@ export default function CreateInvoicePage() {
                   <Checkbox checked={includeDueDate} onCheckedChange={(checked) => setIncludeDueDate(Boolean(checked))} />
                   <span>Include Due Date on proforma invoice</span>
                 </label>
+              </div>
+            )}
+
+            {invoiceType === "tax" && (
+              <div className="mt-4 rounded-2xl border border-border bg-background p-4 space-y-4">
+                <label className="flex items-center gap-3 text-sm cursor-pointer">
+                  <Checkbox checked={includePoDetails} onCheckedChange={(checked) => setIncludePoDetails(Boolean(checked))} />
+                  <span>Include Purchase Order details</span>
+                </label>
+
+                {includePoDetails && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground">Purchase Order No <span className="text-destructive">*</span></label>
+                      <Input
+                        value={poNumber}
+                        onChange={(e) => setPoNumber(e.target.value)}
+                        placeholder="PO-7781"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-muted-foreground">PO Date <span className="text-destructive">*</span></label>
+                      <Popover open={poDateOpen} onOpenChange={setPoDateOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="w-full rounded-xl border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring flex items-center gap-2 text-left"
+                          >
+                            <CalendarIcon size={14} className="shrink-0 text-muted-foreground" />
+                            {poDate ? format(new Date(poDate + "T00:00:00"), "dd MMM yyyy") : "Pick a date"}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={poDate ? new Date(poDate + "T00:00:00") : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                const y = date.getFullYear();
+                                const m = String(date.getMonth() + 1).padStart(2, "0");
+                                const d = String(date.getDate()).padStart(2, "0");
+                                setPoDate(`${y}-${m}-${d}`);
+                                setPoDateOpen(false);
+                              }
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -674,9 +674,10 @@ export function createApp() {
   );
 
   function getInvoiceDownloadFilename(invoiceRecord) {
-    const safeClient = (invoiceRecord?.clientName || 'Client').trim().replace(/[/\\?%*:|"<>]/g, '_');
-    const safeNo = (invoiceRecord?.invoiceNo || 'Invoice').trim().replace(/[/\\?%*:|"<>]/g, '-');
-    return `${safeClient}_${safeNo}.pdf`;
+    // "XYXX Pvt Ltd" + "CTS/26-27/INV015" → "XYXX_CTS_26_27_INV015.pdf"
+    const clientFirstWord = ((invoiceRecord?.clientName || 'Client').trim().split(/\s+/)[0] || '').replace(/[^A-Za-z0-9]/g, '') || 'Client';
+    const safeNo = (invoiceRecord?.invoiceNo || 'Invoice').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Invoice';
+    return `${clientFirstWord}_${safeNo}.pdf`;
   }
 
   // Returns signed URL as JSON — lets the frontend fetch with auth header then open

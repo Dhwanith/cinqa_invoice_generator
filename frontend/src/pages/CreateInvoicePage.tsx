@@ -1,12 +1,12 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarIcon, Check, CheckCircle2, ChevronsUpDown, FileDown, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { CalendarIcon, Check, CheckCircle2, ChevronsUpDown, FileDown, History, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import PageHeader from "@/components/PageHeader";
-import { createInvoice, fetchInvoiceDetail, updateInvoice, type CreateInvoiceResult, type SaveInvoicePayload, fetchClients, formatCurrency } from "@/services/api";
+import { createInvoice, fetchInvoiceDetail, fetchInvoices, updateInvoice, type CreateInvoiceResult, type SaveInvoicePayload, fetchClients, formatCurrency } from "@/services/api";
 import { downloadInvoicePdf } from "@/services/invoicePdf";
 import type { Invoice, LineItem } from "@/types/invoice";
 import { cn } from "@/lib/utils";
@@ -66,6 +66,14 @@ export default function CreateInvoicePage() {
   ]);
   const [submittedInvoice, setSubmittedInvoice] = useState<CreateInvoiceResult | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [reuseOpen, setReuseOpen] = useState(false);
+  const [reuseLoading, setReuseLoading] = useState(false);
+
+  const { data: reuseInvoices = [], isLoading: isReuseListLoading } = useQuery({
+    queryKey: ["invoices", "reuse-list"],
+    queryFn: () => fetchInvoices(),
+    enabled: reuseOpen,
+  });
 
   // Pre-fill fields when editing an existing invoice
   useEffect(() => {
@@ -229,6 +237,34 @@ export default function CreateInvoicePage() {
         };
       })
     );
+  };
+
+  const handleReuseInvoiceItems = async (invoiceId: string) => {
+    setReuseOpen(false);
+    setReuseLoading(true);
+    try {
+      const source = await fetchInvoiceDetail(invoiceId);
+      const items = source.lineItems || [];
+      if (!items.length) {
+        toast.error(`${source.invoiceNo} has no line items to reuse.`);
+        return;
+      }
+      setShowQuantity(Boolean(source.showQuantity));
+      setLineItems(
+        items.map((li) => ({
+          description: li.description,
+          sac: li.sac || "",
+          amount: li.amount,
+          quantity: li.quantity ?? (source.showQuantity ? 1 : null),
+          unitPrice: li.unitPrice ?? (source.showQuantity ? li.amount : null),
+        }))
+      );
+      toast.success(`Filled ${items.length} item${items.length === 1 ? "" : "s"} from ${source.invoiceNo}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load invoice items.");
+    } finally {
+      setReuseLoading(false);
+    }
   };
 
   const addLineItem = () => {
@@ -448,11 +484,44 @@ export default function CreateInvoicePage() {
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="bg-card rounded-3xl border border-border shadow-soft p-6 md:p-7">
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-5 gap-2 flex-wrap">
               <h3 className="text-lg font-bold">Line Items</h3>
-              <Button type="button" onClick={addLineItem} variant="outline" className="rounded-xl">
-                <Plus size={14} className="mr-2" /> Add Item
-              </Button>
+              <div className="flex items-center gap-2">
+                <Popover open={reuseOpen} onOpenChange={setReuseOpen}>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="rounded-xl" disabled={reuseLoading}>
+                      {reuseLoading ? <LoaderCircle size={14} className="mr-2 animate-spin" /> : <History size={14} className="mr-2" />} Reuse Items
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-96" align="end">
+                    <Command>
+                      <CommandInput placeholder="Search invoice no or client…" />
+                      <CommandList>
+                        <CommandEmpty>{isReuseListLoading ? "Loading invoices…" : "No invoices found."}</CommandEmpty>
+                        <CommandGroup>
+                          {reuseInvoices.map((inv) => (
+                            <CommandItem
+                              key={inv.id}
+                              value={`${inv.invoiceNo} ${inv.clientName}`}
+                              onSelect={() => void handleReuseInvoiceItems(inv.id)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{inv.invoiceNo}</p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {inv.clientName} · {inv.invoiceType === "proforma" ? "Proforma" : "Tax"} · {formatCurrency(inv.total)}
+                                </p>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                <Button type="button" onClick={addLineItem} variant="outline" className="rounded-xl">
+                  <Plus size={14} className="mr-2" /> Add Item
+                </Button>
+              </div>
             </div>
             <div className="space-y-4">
               {lineItems.map((item, index) => (
